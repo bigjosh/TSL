@@ -86,7 +86,7 @@ void LCD_Init(void)
 //        _BV( LCDDC2) | _BV(LCDDC1) | _BV( LCDDC0) |         // 50% of clock cycle (longest) 31uA
 //        0 |         // 300uS 12.5uA
        
-          _BV( LCDDC0) |         // 70uS 10uA
+          _BV( LCDDC0)  |     // 70uS 10uA
        
     
 //        (1<<LCDCC3) | (1<<LCDCC2) | (1<<LCDCC1) |  (1<<LCDCC0)  // LCD contract control 3.35V
@@ -95,8 +95,9 @@ void LCD_Init(void)
 
           //(1<<LCDCC1) |  (1<<LCDCC0)  // LCD contract control 2.75V
           
-        (0<<LCDCC1) |  (0<<LCDCC0)  // LCD contract control 2.60V
+//        (0<<LCDCC1) |  (0<<LCDCC0)  // LCD contrast control 2.60V
           
+          (1<<LCDCC3) | (1<<LCDCC2) | (1<<LCDCC1) |  (1<<LCDCC0)  // LCD contrast control 2.60V
 
 
     ;
@@ -119,7 +120,7 @@ void Timer2_Init(void) {
         TCCR2A |= _BV(CS20) | _BV(CS22);            // Clock prescaler /128 (enables timer)
         
         //TCCR2A |= _BV(CS20) ;            // Clock prescaler /1 (enables timer)
-        // _delay_ms(1000);
+         _delay_ms(1000);
         
         // Must enable interrupt AFTER timer clock started
         
@@ -163,6 +164,8 @@ int main(void)
         LCDDR14 = 0xff;
         LCDDR15 = 0xff;        
         LCDDR16 = 0xff;
+        LCDDR17 = 0xff;
+        LCDDR18 = 0xff;
         
     
         sleep_cpu();
@@ -190,10 +193,11 @@ int main(void)
         LCDDR14 = 0x00;
         LCDDR15 = 0x00;
         LCDDR16 = 0x00;
+        LCDDR17 = 0x00;
+        LCDDR18 = 0x00;
         
         sleep_cpu();
     }
- 
  
         DDRB |= _BV(6);
         
