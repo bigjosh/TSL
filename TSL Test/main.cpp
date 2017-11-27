@@ -144,6 +144,7 @@ int main(void)
             
     sei();
 
+    SMCR = _BV( SM1) | _BV(SM0 ) | _BV(SE);       // Power save mode, Sleep Enabled (equivalent to above but 10 bytes shorter)
 
     while (1) 
     {
@@ -205,7 +206,6 @@ int main(void)
         set_sleep_mode( SLEEP_MODE_PWR_SAVE );      // Power save LCD still works                
         sleep_enable();
         */
-        SMCR = _BV( SM1) | _BV(SM0 ) | _BV(SE);       // Power save mode, Sleep Enabled (equivalent to above but 10 bytes shorter)
         
         //Timer2_Init();      // set up 1 interrupt per second off the XTAL   
         //sei();
