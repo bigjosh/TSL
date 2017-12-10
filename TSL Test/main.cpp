@@ -23,6 +23,10 @@
 void LCD_Init(void)
 {
     
+    /*
+    
+    XTAL
+    
     LCDCRB =  
     
         ( 1<< LCDCS) |                  // When this bit is written to one, the external asynchronous clock source is used. We use XTAL becuase EXCLK is not set,.
@@ -34,6 +38,33 @@ void LCD_Init(void)
         
         ;
 
+
+    LCDFRR =
+        // _BV( LCDPS0 )      // clk /64 - looks great but maybe 1-2uA more power
+        _BV( LCDPS1 )      // clk /128 - looks ok just on the edge of getting jittery.
+
+    ;
+
+
+
+    */
+
+
+    // External clock on XTAL1
+    
+    LCDCRB =
+
+        ( 1<< LCDCS) |                  // When this bit is written to one, the external asynchronous clock source is used. We use XTAL becuase EXCLK is not set,.    
+        ( 0 << LCD2B ) |                // When this bit is written to zero, 1/3 bias is used. When this bit is written to one, ½ bias is used.
+        (1<<LCDMUX1) | (1<<LCDMUX0) |   // 1/4 duty, 4 coms on pins COM0:3
+    
+    
+        (1<<LCDPM2) | (1<<LCDPM1) | (1<<LCDPM0)        // 25 segments, on pins SEG0:24
+    
+    ;
+
+    
+      ASSR |= _BV( AS2 );             // Clock from TOSC1
     
 
     LCDFRR = 
@@ -61,6 +92,7 @@ void Timer2_Init(void) {
     
         
         ASSR |= _BV( AS2 );             // Clock from XTAL
+
         
         TCCR2A |= _BV(CS20) | _BV(CS22);            // Clock prescaler /128 (enables timer)
         
@@ -79,13 +111,32 @@ void Timer2_Init(void) {
 
 EMPTY_INTERRUPT(TIMER2_OVF_vect);
 
+void digit( uint8_t *r , uint8_t v ) {
+    switch (v) {
+        
+        case 0:
+            
+            break;
+    }            
+        
+}    
+
 int main(void)
 {
     
+    // Good morning blink on pin #2
+    
+    DDRE |= _BV(0);    
+    PINE |= _BV(0);
+    PINE |= _BV(0);
+    PINE |= _BV(0);
+    PINE |= _BV(0);
+    PINE |= _BV(0);
+    PINE |= _BV(0);
+
     // Shut down things we don't need. Only matters when actively running.
         
     PRR |= _BV( PRTIM1) | _BV(PRSPI ) | _BV( PRUSART0 ) | _BV( PRADC );
-    
 
     LCD_Init();
     Timer2_Init();
@@ -100,24 +151,24 @@ int main(void)
         LCDDR1 = 0xff;
         LCDDR2 = 0xff;
         LCDDR3 = 0xff;
-        LCDDR4 = 0xff;
+       // LCDDR4 = 0xff;        // SEG>24, Not used on this chip
         LCDDR5 = 0xff;
         LCDDR6 = 0xff;
         LCDDR7 = 0xff;
         LCDDR8 = 0xff;
-        LCDDR9 = 0xff;
+        //LCDDR9 = 0xff;        // SEG>24, Not used on this chip
         LCDDR10 = 0xff;
         LCDDR11 = 0xff;
         LCDDR12 = 0xff;
         LCDDR13 = 0xff;
-        LCDDR14 = 0xff;
+        //LCDDR14 = 0xff;       // SEG>24, Not used on this chip
         LCDDR15 = 0xff;        
         LCDDR16 = 0xff;
         LCDDR17 = 0xff;
         LCDDR18 = 0xff;
         
     
-        // Deep sleep until timer rools
+        // Deep sleep until timer rolls
         sleep_cpu();
                 
         
@@ -144,9 +195,7 @@ int main(void)
         // Deep sleep until timer rools        
         sleep_cpu();
     }
- 
-        DDRB |= _BV(6);
-        
+         
  
 }
 
