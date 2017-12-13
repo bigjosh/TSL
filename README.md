@@ -34,10 +34,6 @@ If the battery datasheets are to be believed, this suggests a runtime of 10-20 y
 
 ## Future directions
 
-If the datasheets are to be believed, switching to an ultra low power ARM (like SAM22L) or STM8 could reduce power drastically. This needs to be tested.
+If the datasheets are to be believed, switching to an ultra low power ARM (like SAM22L) or STM8 could reduce power drastically, at the cost of higher cost. This needs to be tested.
 
-It might be possible to do temperature compensation inside the MCU and achieve more accuracy than the DS3231S while saving a part. While this couls also potentially save power in theory, it seems unlike that it would ion practice since that part astonishingly pulls less than 1uA in practice. 
-
-   
-
-
+It might be possible to do temperature compensation inside the MCU and achieve more accuracy than the DS3231S while saving a part. While this could also potentially save power in theory, it seems unlikely that it would in practice since that part astonishingly pulls less than 1uA in practice. 
