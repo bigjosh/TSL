@@ -27,7 +27,9 @@ struct lcd_visible_segment {
     uint8_t seg;    
 };
 
-const lcd_visible_segment PROGMEM digitmap[2][7] = {
+// TODO: PROGMEM and then staticly compiled transisions
+
+const lcd_visible_segment  digitmap[2][7] = {
 
     {     //1
         {0 , 1 },       //A
@@ -40,30 +42,30 @@ const lcd_visible_segment PROGMEM digitmap[2][7] = {
     },
     
     {     //2
-        {3 , 0 },       //A
-        {3 , 1 },       //B
-        {3 , 2 },       //C
-        {4 , 3 },       //D
-        {4 , 2 },       //E
-        {4 , 0 },       //F
-        {4 , 1 },       //G        
+        {0 , 3 },       //A
+        {1 , 3 },       //B
+        {2 , 3 },       //C
+        {3 , 2 },       //D
+        {2 , 2 },       //E
+        {1 , 2 },       //F
+        {0 , 2 },       //G        
     },                
 
 };
 
-void spinOn( uint8_t step ) {
+void spinOn( uint8_t d,  uint8_t step ) {
     
-    LCD_MEM_REG( 3 , 19 ) |=  LCD_MEM_BIT( 3 , 19 );
+    //LCD_MEM_REG( 3 , 19 ) |=  LCD_MEM_BIT( 3 , 19 );
     
     //LCDDR0 |= LCD_MEM_BIT( digitmap[0][step].seg ,  digitmap[0][step].com );
     
-    LCD_MEM_REG( digitmap[0][step].seg ,  digitmap[0][step].com ) |= LCD_MEM_BIT( digitmap[0][step].seg ,  digitmap[0][step].com );
+    LCD_MEM_REG( digitmap[d][step].com ,  digitmap[d][step].seg ) |= LCD_MEM_BIT( digitmap[d][step].com ,  digitmap[d][step].seg );
     
 }    
 
-void spinOff( uint8_t step ) {
+void spinOff( uint8_t d,  uint8_t step ) {
     
-    LCD_MEM_REG( digitmap[0][step].seg ,  digitmap[0][step].com  ) &= ~ LCD_MEM_BIT( digitmap[0][step].seg ,  digitmap[0][step].com );
+    LCD_MEM_REG( digitmap[d][step].com ,  digitmap[d][step].seg  ) &= ~ LCD_MEM_BIT( digitmap[d][step].com ,  digitmap[d][step].seg );
     
 }
 

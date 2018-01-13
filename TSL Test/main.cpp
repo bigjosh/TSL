@@ -162,11 +162,7 @@ int main(void)
     SMCR = _BV( SM1) | _BV(SM0 ) | _BV(SE);       // Power save mode, Sleep Enabled
             
     sei();
-    
-    spinOn(0);
-    
-    while (1);
-    
+        
     
     uint8_t step=0;
 
@@ -186,18 +182,22 @@ int main(void)
     
     while (1) {      
         
-             
-        spinOff(step);
-        
+        for( int d=0; d<2 ; d++ ) {             
+            spinOff(d,step);
+        }        
         step++;
         
         if (step==7) {
             step=0;
         }            
+
+        for( int d=0; d<2 ; d++ ) {
         
-        spinOn(step);
-       _delay_ms(1000);
-        //sleep_cpu();
+            spinOn(d,step);
+            
+        }            
+       //_delay_ms(1000);
+        sleep_cpu();
     }         
  
 }

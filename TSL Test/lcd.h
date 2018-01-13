@@ -34,8 +34,8 @@
 extern const uint8_t PROGMEM segmap[];
 */
 
-void spinOn( uint8_t step );
+void spinOn( uint8_t d, uint8_t step );
 
-void spinOff( uint8_t step );
+void spinOff( uint8_t d, uint8_t step );
 
 #endif /* LCD_H_ */
