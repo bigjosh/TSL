@@ -68,8 +68,8 @@ void LCD_Init(void)
     
 
     LCDFRR = 
-      // _BV( LCDPS0 )      // clk /64 - looks great but maybe 1-2uA more power
-         _BV( LCDPS1 )      // clk /128 - looks ok just on the edge of getting jittery. 
+         _BV( LCDPS0 )      // clk /64 - looks great but maybe 1-2uA more power
+      //   _BV( LCDPS1 )      // clk /128 - looks ok just on the edge of getting jittery. 
 
         ;
 
@@ -80,7 +80,7 @@ void LCD_Init(void)
        
           (1<<LCDCC3) | (1<<LCDCC2) | (1<<LCDCC1) |  (1<<LCDCC0);  // LCD contrast control 3.35V
           
-          // We need a lot of voltage here becuase our LCD is a 6:00PM so push the volts opens the viewing angle up to normal          
+          // We need a lot of voltage here because our LCD is a 6:00PM so push the volts opens the viewing angle up to normal          
 
     LCDCRA = (1<<LCDEN) |
         _BV( LCDAB );               // Low power waveform , drops 2-4uA but looks dimmer and digits slower to update
@@ -111,6 +111,21 @@ void Timer2_Init(void) {
 
 EMPTY_INTERRUPT(TIMER2_OVF_vect);
 
+/*
+
+//Blink LED for testing 
+
+ISR(TIMER2_OVF_vect) 
+ {
+            // TODO: REMOVE Blink DEBUG led
+            PORTE |= _BV(4);
+            _delay_ms(100);
+            PORTE &= ~_BV(4);
+            _delay_ms(100);
+};
+
+*/
+
 void digit( uint8_t *r , uint8_t v ) {
     switch (v) {
         
@@ -123,6 +138,9 @@ void digit( uint8_t *r , uint8_t v ) {
 
 int main(void)
 {
+    
+    DDRE |= _BV(4) | _BV(5);    // TODO: Remove DEBUG led enable
+        
     
     // Good morning blink on pin #2
     
@@ -144,58 +162,43 @@ int main(void)
     SMCR = _BV( SM1) | _BV(SM0 ) | _BV(SE);       // Power save mode, Sleep Enabled
             
     sei();
-
-    while (1) 
-    {
-        LCDDR0 = 0xff;
-        LCDDR1 = 0xff;
-        LCDDR2 = 0xff;
-        LCDDR3 = 0xff;
-       // LCDDR4 = 0xff;        // SEG>24, Not used on this chip
-        LCDDR5 = 0xff;
-        LCDDR6 = 0xff;
-        LCDDR7 = 0xff;
-        LCDDR8 = 0xff;
-        //LCDDR9 = 0xff;        // SEG>24, Not used on this chip
-        LCDDR10 = 0xff;
-        LCDDR11 = 0xff;
-        LCDDR12 = 0xff;
-        LCDDR13 = 0xff;
-        //LCDDR14 = 0xff;       // SEG>24, Not used on this chip
-        LCDDR15 = 0xff;        
-        LCDDR16 = 0xff;
-        LCDDR17 = 0xff;
-        LCDDR18 = 0xff;
-        
     
-        // Deep sleep until timer rolls
-        sleep_cpu();
-                
-        
-        LCDDR0 = 0x00;
-        LCDDR1 = 0x00;
-        LCDDR2 = 0x00;
-        LCDDR3 = 0x00;
-        LCDDR4 = 0x00;
-        LCDDR5 = 0x00;
-        LCDDR6 = 0x00;
-        LCDDR7 = 0x00;
-        LCDDR8 = 0x00;
-        LCDDR9 = 0x00;
-        LCDDR10 = 0x00;
-        LCDDR11 = 0x00;
-        LCDDR12 = 0x00;
-        LCDDR13 = 0x00;
-        LCDDR14 = 0x00;
-        LCDDR15 = 0x00;
-        LCDDR16 = 0x00;
-        LCDDR17 = 0x00;
-        LCDDR18 = 0x00;
+    spinOn(0);
+    
+    while (1);
+    
+    
+    uint8_t step=0;
 
-        // Deep sleep until timer rools        
+    while (0) 
+    {
+     
+        LCDDR0 = 0x01;
+        
+        _delay_ms(1);
         sleep_cpu();
-    }
-         
+        LCDDR0 = 0x02;
+        _delay_ms(1000);        
+        //sleep_cpu();
+        
+        
+    };
+    
+    while (1) {      
+        
+             
+        spinOff(step);
+        
+        step++;
+        
+        if (step==7) {
+            step=0;
+        }            
+        
+        spinOn(step);
+       _delay_ms(1000);
+        //sleep_cpu();
+    }         
  
 }
 
