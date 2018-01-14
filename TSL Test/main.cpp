@@ -19,6 +19,9 @@
 
 #define SBI(x,b) (x|=_BV(b))
 #define CBI(x,b) (x&=~_BV(b))
+#define TBI(x,b) (x&_BV(b))
+
+
 
 void LCD_Init(void)
 {
@@ -109,7 +112,13 @@ void Timer2_Init(void) {
 
 // I wish there was a way to say "Don't call the ISR, just pick up where you left off!"
 
+
+// Overflows ever second. Wkaes us and updates display
 EMPTY_INTERRUPT(TIMER2_OVF_vect);
+
+// Triggered whenever firing pin changes. Used to wake us up so reponse to pin change is instant.
+EMPTY_INTERRUPT(PCINT0_vect);
+
 
 /*
 
@@ -126,20 +135,12 @@ ISR(TIMER2_OVF_vect)
 
 */
 
-void digit( uint8_t *r , uint8_t v ) {
-    switch (v) {
-        
-        case 0:
-            
-            break;
-    }            
-        
-}    
+
 
 int main(void)
 {
     
-    DDRE |= _BV(4) | _BV(5);    // TODO: Remove DEBUG led enable
+    //DDRE |= _BV(4) | _BV(5);    // TODO: Remove DEBUG led enable
         
     
     // Good morning blink on pin #2
@@ -160,45 +161,160 @@ int main(void)
     Timer2_Init();
     
     SMCR = _BV( SM1) | _BV(SM0 ) | _BV(SE);       // Power save mode, Sleep Enabled
-            
-    sei();
-        
     
-    uint8_t step=0;
+    
+    SBI( PORTE , 7 );           // Enable pull-up on firing pin
 
-    while (0) 
-    {
-     
-        LCDDR0 = 0x01;
-        
-        _delay_ms(1);
-        sleep_cpu();
-        LCDDR0 = 0x02;
-        _delay_ms(1000);        
-        //sleep_cpu();
-        
-        
-    };
+    SBI( PCMSK0 , PCINT7 );     // Enable pin change on firing pin   
+    SBI( EIMSK ,  PCIE0 );      // Enable pin change bank that firing pin is on 
+            
+    sei();          // Enable interrupt so we can wake on timer overflow
     
-    while (1) {      
+    // While firing pin down...
+    // Display a nice little animation so people can be confident that 
+    // it will work right when the firing pin is pulled. 
+
+    uint8_t step=0;    
+    
+    while ( !TBI(  PINE , 7 ) ) {
         
-        for( int d=0; d<2 ; d++ ) {             
-            spinOff(d,step);
-        }        
+        for( int n=0; n<12;n++ ) {
+            
+            if (n & 1 ) {
+                figure8On( n , step );
+            } else {
+                figure8On( n , (step + 4) % 8 );                
+            }
+            
+        }                            
+                
+            
+        sleep_cpu();            
+
+        for( int n=0; n<12;n++ ) {
+            
+            if (n & 1 ) {
+                figure8Off( n , step );
+                } else {
+                figure8Off( n , (step + 4) % 8 );
+            }
+            
+        }
+
         step++;
         
-        if (step==7) {
-            step=0;
-        }            
-
-        for( int d=0; d<2 ; d++ ) {
+        if (step==8) step=0;
         
-            spinOn(d,step);
+    }        
+    
+    // PIN PULLED!!!!!
+    
+    CBI( PORTE , 7 );           // Display pull-up on firing pin to save a tiny leakage current
+
+    CBI( EIMSK ,  PCIE0 );      // Enable pin change bank that firing pin is on, so for now on
+                                // the pin is dead to us. No going back, sister. 
+    
+    
+    #warning Fast counter easter egg in place
+                
+    SBI( PORTB , 3 );           // Enable pullup on the top right pin of the ISP header
+                                // Short this to ground to enable fast mode for testing
+                            
+    // Here is the counter beef
+    
+    uint8_t digits[12] = {0,0,0,0,0,0,0,0,0,0,0,0};
+    
+    // Start with all 0's on display
+    
+    for(uint8_t d=0; d<12;d++) {
+        displaydigit( d , 0 , 1 );
+    }        
+    
+    // Start counting
+    
+    TCNT2 = 0;      // Always start on a full second boundary no matter when firing pin
+                    // happened to get pulled in the timer cycle
+       
+    while (1) {
+        
+        if ( TBI( PINB , 3 ) ) {        // Fast mode enabled?
             
-        }            
-       //_delay_ms(1000);
-        sleep_cpu();
-    }         
+            // Nope - pull up is not grounded        
+            sleep_cpu();
+        } else {
+            
+            // Fast mode pin is grounded. 
+            // Wait for a single LCD refresh cycle so at least display is clear. 
+            
+            while ( !( LCDCRA & _BV(LCDIF) ) );       // Wait for next refresh cycle to start
+            
+            LCDCRA |= _BV( LCDIF );                   // Clear the flag for next time.
+                                                      // "writing a logical one to the flag clears LCDIF"            
+        }
+                            
+        // Start rippling th overflow up
+            
+        uint8_t ripplePlace=12;
+        uint8_t rippleDigit;
+            
+        do {
+            
+            // We count places backwards becuase digits are numbered left to right, 
+            // but ripple flows right to left
+            
+            ripplePlace--;
+                        
+            rippleDigit = digits[ripplePlace];            
+                                
+            displaydigit( ripplePlace , rippleDigit , 0 );     // undraw prev value of digit 
+                
+            if ( ++rippleDigit == 10 ) {
+                    
+                rippleDigit = 0;
+                    
+            }
+
+            displaydigit( ripplePlace , rippleDigit , 1 );     // draw new digit
+            
+            digits[ripplePlace] = rippleDigit;
+            
+                                
+        } while ( rippleDigit==0 && ripplePlace < 12);     // This will leave 0's on the display when we overflow in 10,000 years
+                                                
+    }    
+        
+    for( int d=0; d<11;d++) {
+        for( int n=0; n<10; n++) {
+            for(int c=0; c<12; c++ ) {
+                digitOn( c , (n+c)%10 );
+            }                
+                _delay_ms(500);
+            
+            for(int c=0; c<12; c++ ) {
+                digitOff( c, (n+c)%10);
+            }
+            
+        }
+    }                    
+
+while(1);
+
+    while (1) {
+        digitOn( 0 , 0 );
+        _delay_ms(500);
+        digitOff( 0 , 0 );        
+        digitOn( 0 , 1 );
+        _delay_ms(500);
+        digitOff( 0 , 1 );
+        digitOn( 0 , 2 );
+        _delay_ms(500);
+        digitOff( 0 , 2);        
+    }        
+        
+
+    
+    while (1);
+    
  
 }
 

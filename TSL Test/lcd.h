@@ -38,4 +38,24 @@ void spinOn( uint8_t d, uint8_t step );
 
 void spinOff( uint8_t d, uint8_t step );
 
+// Darken the segments in digit d (leftmost is 0) to display the number n
+
+void digitOn( uint8_t d,  uint8_t n );
+
+// Undarken the segments in digit d (leftmost is 0) to undisplay the number n
+
+void digitOff( uint8_t d,  uint8_t n );
+
+// Display the decimal digit n (0-9) at position d (0-11 where 0 is leftmost) dark if onFlag, light if not
+
+void displaydigit( uint8_t d,  uint8_t n , uint8_t onFlag);
+
+// Animate an atractive figuree 8 pattern. There are 8 steps
+
+void figure8On( uint8_t d,  uint8_t s );
+
+
+void figure8Off( uint8_t d,  uint8_t s );
+
+
 #endif /* LCD_H_ */
