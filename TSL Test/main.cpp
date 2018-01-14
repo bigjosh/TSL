@@ -116,7 +116,7 @@ void Timer2_Init(void) {
 // Overflows ever second. Wkaes us and updates display
 EMPTY_INTERRUPT(TIMER2_OVF_vect);
 
-// Triggered whenever firing pin changes. Used to wake us up so reponse to pin change is instant.
+// Triggered whenever firing pin changes. Used to wake us up so response to pin change is instant.
 EMPTY_INTERRUPT(PCINT0_vect);
 
 
@@ -165,6 +165,12 @@ int main(void)
     
     SBI( PORTE , 7 );           // Enable pull-up on firing pin
 
+    // Here we enable the pin change interrupt on the firing pin
+    // This will cause us to wake on any change of this pin. 
+    // This will make the response to the pulling of the pin feel instantaneous 
+    // since we will not have to wait for the the next timer overflow to     
+    // wake and see that the pin chaged. 
+    
     SBI( PCMSK0 , PCINT7 );     // Enable pin change on firing pin   
     SBI( EIMSK ,  PCIE0 );      // Enable pin change bank that firing pin is on 
             
@@ -209,16 +215,16 @@ int main(void)
     
     // PIN PULLED!!!!!
     
-    CBI( PORTE , 7 );           // Display pull-up on firing pin to save a tiny leakage current
+    CBI( PORTE , 7 );           // Disable pull-up on firing pin to save a tiny leakage current
 
-    CBI( EIMSK ,  PCIE0 );      // Enable pin change bank that firing pin is on, so for now on
+    CBI( EIMSK ,  PCIE0 );      // Disable pin change bank that firing pin is on, so for now on
                                 // the pin is dead to us. No going back, sister. 
     
     
     #warning Fast counter easter egg in place
                 
-    SBI( PORTB , 3 );           // Enable pullup on the top right pin of the ISP header
-                                // Short this to ground to enable fast mode for testing
+    SBI( PORTB , 3 );           // Enable pull-up on the top right pin of the ISP header
+                                // Short this to ground (bottom left)  to enable fast mode for testing
                             
     // Here is the counter beef
     
@@ -234,6 +240,11 @@ int main(void)
     
     TCNT2 = 0;      // Always start on a full second boundary no matter when firing pin
                     // happened to get pulled in the timer cycle
+       
+    // This code is very simple, but uses more power than necessary.
+    // For production, we would likely want to unroll the loop and have it directly
+    // fiddle only the bits that change when the digits increments. 
+    // This would likely be machine code written by a machine to optimize the sequencing.            
        
     while (1) {
         
@@ -259,7 +270,7 @@ int main(void)
             
         do {
             
-            // We count places backwards becuase digits are numbered left to right, 
+            // We count places backwards because digits are numbered left to right, 
             // but ripple flows right to left
             
             ripplePlace--;
@@ -282,39 +293,8 @@ int main(void)
         } while ( rippleDigit==0 && ripplePlace < 12);     // This will leave 0's on the display when we overflow in 10,000 years
                                                 
     }    
-        
-    for( int d=0; d<11;d++) {
-        for( int n=0; n<10; n++) {
-            for(int c=0; c<12; c++ ) {
-                digitOn( c , (n+c)%10 );
-            }                
-                _delay_ms(500);
-            
-            for(int c=0; c<12; c++ ) {
-                digitOff( c, (n+c)%10);
-            }
-            
-        }
-    }                    
 
-while(1);
-
-    while (1) {
-        digitOn( 0 , 0 );
-        _delay_ms(500);
-        digitOff( 0 , 0 );        
-        digitOn( 0 , 1 );
-        _delay_ms(500);
-        digitOff( 0 , 1 );
-        digitOn( 0 , 2 );
-        _delay_ms(500);
-        digitOff( 0 , 2);        
-    }        
-        
-
-    
-    while (1);
-    
- 
+    // Never get here. Count forever.
+    // TODO: Display a "HAPPY NEVER" message when we get to the end of time?
 }
 
