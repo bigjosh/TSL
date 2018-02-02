@@ -3,6 +3,9 @@
 
 Debug/
 
+# Diptrace temp files
+*~
+
 
 # Compiled Object files
 *.slo
@@ -27,7 +30,6 @@ Debug/
 *.lai
 *.la
 *.a
-*.lib
 
 # Executables
 *.exe
