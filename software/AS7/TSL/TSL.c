@@ -1,31 +1,8 @@
 /*
- * Basic_LCD_Ex_XMEGA_B1_Xplained.c
+ * Time Since Launch firmware for ATXMEGA63B3
  *
- * Created: 3/1/2013 1:38:53 PM
- * Author: Scott_Schmit
+ * https://github.com/bigjosh/TSL
  * 
- * Purpose:
- * The purpose of this project is to present a basic application
- * that describes how to operate the c42048 that comes standard
- * with the ATxmega128B1 Xplained Kit from Atmel. The project
- * combines functions that are scattered throughout the Atmel
- * Software Framework into a single project made up of only a
- * few files, while maintaining a standard project flow that has
- * been implemented in ASF for Xmega devices. It is meant to
- * provide an easy introduction to the integrated LCD controller 
- * that is included in the Xmega B-family of microcontrollers.
- *
- * General Description:
- * Upon Power-up, the LCD displays a test alpha string and a 
- * test number string, configurable by the user. The application
- * also shows how to display individual icons such as the AVR
- * icon and the Bar graph at the lower portion of the display.
- * The LCD Frame Interrupt is used to toggle an LED at 4 Hz. The
- * interrupt is also configurable by the user and can be used to
- * implement a software timer based on the frame rate of the LCD.
- * The backlight can be turned on or off by the user and the
- * contrast of the display can be adjusted to reduce power
- * consumption.
  */ 
 
 // Required AVR Libraries
@@ -33,17 +10,8 @@
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
 
-#define F_CPU 2000000		// Using new 
+#define F_CPU 2000000		// Default internal RC clock on startup
 
-
-// User-Created Include Files
-#include "My_Board.h"
-#include "My_LCD.h"
-
-// Function Prototypes
-void sysclk_init(void);
-void pmic_init(void);
-void board_init(void);
 
 void enable_rtc() {
 	
@@ -57,6 +25,108 @@ void enable_rtc() {
 	CLK.RTCCTRL = CLK_RTCEN_bm; // 0x01
 	//////////////////////////////////////////////////////////////////////
 }
+
+
+void pmic_init(void) {
+	
+	//////////////////////////////////////////////////////////////////////
+	//PMIC.CTRL
+	//     7       6       5       4       3        2         1         0
+	// | RREN  | IVSEL |   -   |   -   |   -   | HILVLEN | MEDLVLEN | LOLVLEN |
+	//     0       0       0       0       0        0         0         0
+	// Enable all interrupt levels
+	// Load Int vectors to application section of flash
+	// Set interrupt priority to Static (lower address = higher priority)
+	PMIC.CTRL = PMIC_HILVLEN_bm | PMIC_MEDLVLEN_bm | PMIC_LOLVLEN_bm; //0x07
+	//////////////////////////////////////////////////////////////////////
+	
+}
+
+
+
+void lcd_init(void) {
+
+	//////////////////////////////////////////////////////////////////////
+	//LCD.CTRLA
+	//     7        6       5        4        3        2       1       0
+	// | ENABLE | XBIAS | DATCLK | COMSWP | SEGSWP | CLRDT | SEGON | BLANK|
+	//     0        0       0        0        0        0       0       0
+	// Clear the display memory
+	LCD.CTRLA = LCD_CLRDT_bm; //0x04
+	//////////////////////////////////////////////////////////////////////
+	
+	
+	//////////////////////////////////////////////////////////////////////
+	//LCD.CTRLB
+	//     7        6       5       4        3       2       1      0
+	// | PRESC |       CLKDIV[2:0]       | LPWAV |   -   |   DUTY[1:0]   |
+	//     0        0       0       0        0       0       0      0
+	// Frame Rate set to 64 Hz
+	// LP Wave Enabled
+	// 1/4 Duty, 1/3 Bias, COM[0:3] used
+	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm | LCD_LPWAV_bm; //0xB8
+	//////////////////////////////////////////////////////////////////////
+	
+	//////////////////////////////////////////////////////////////////////
+	//LCD.CTRLC
+	//     7       6       5       4        3        2       1       0
+	// |   -   |   -   |                   PMSK[5:0]                     |
+	//     0       0       0       0        0        0       0       0
+	// Enable all segment drivers on micro
+	LCD.CTRLC = LCD_PMSK_gm; // 0x3F
+	//////////////////////////////////////////////////////////////////////
+	
+	
+	//////////////////////////////////////////////////////////////////////
+	//LCD.INTCTRL
+	//     7        6       5       4        3       2       1      0
+	// |                XIME[4:0]                |   -   | FCINTLVL[1:0] |
+	//     0        0       0       0        0       0       0      0
+	// Set Frame Complete Interrupt
+	// Default Waveforms:	Int Period = XIME[4:0] + 1
+	// LP Waveform:			Int Period = (XIME[4:0] + 1) * 2
+	LCD.INTCTRL = LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 16 frames with high priority
+	//////////////////////////////////////////////////////////////////////
+	
+	
+	//////////////////////////////////////////////////////////////////////
+	//LCD.CTRLD
+	//     7       6       5       4        3        2       1       0
+	// |   -   |   -   |   -   |   -   | BLINKEN |   -   | BLINKRATE[1:0] |
+	//     0       0       0        0       0        0       0       0
+	// Disable hardware blinking
+	LCD.CTRLD = ~LCD_BLINKEN_bm; // 0x00
+	//////////////////////////////////////////////////////////////////////
+	
+	
+	//////////////////////////////////////////////////////////////////////
+	//LCD.CTRLA
+	//     7        6       5        4        3        2       1       0
+	// | ENABLE | XBIAS | DATCLK | COMSWP | SEGSWP | CLRDT | SEGON | BLANK|
+	//     0        0       0        0        0        0       0       0
+	// Enable LCD
+	// Enable all LCD segments
+	LCD.CTRLA |= LCD_ENABLE_bm | LCD_SEGON_bm; // 0x82
+	//////////////////////////////////////////////////////////////////////
+	
+	// set LCD contrast with signed int value between -32 ~ 31
+	// -32 corresponds to a segment voltage of approx 2.5V
+	//   0 corresponds to a segment voltage of approx 3.0V
+	//  31 corresponds to a segment voltage of approx 3.5V
+	// Default is 0 (3.0V)
+	LCD.CTRLF = 31;
+}
+
+//  Disable unused peripherals to save power
+
+void prr_init() {
+    
+    // Disable everything but the LCD & RTC
+    
+    // TODO: DO we need to RTC? I think we have to track it ourselves anyway and increment off the LCD interrupt
+    
+    PR.PRGEN = PR_USB_bm | PR_AES_bm | PR_EVSYS_bm | PR_DMA_bm;   
+}    
 
 /////////////////////////////////////////////////////////////////////
 // The main function follows a work flow that has been standardized
@@ -78,25 +148,31 @@ int main(void)
 	
     // Configure System and Peripheral Clocks
     //sysclk_init();
+    
+    
+    // Disable unused peripherals to save power
+    prr_init();
 	
-	// TODO: PRR
-	
+
+    // TODO: These are just for debug output. Get rid of them. 
 	PORTC.DIR = 0xff;
 	PORTC.OUT = 0xff;
 	
-	enable_rtc();
+    // Enable the ultra low power RTC clock
+    // We will drive the LCD from this
+	enable_rtc();           
 	
 	// Configure Interrupt Priority Level and Location of Vectors
 	pmic_init();
 	
 	// Enable change to protected IO reg
 	//CCP = 0xD8; 
-	// Disable JTAG for lower power
+	// TODO: Disable JTAG for lower power
 	//MCU_MCUCR = MCU_JTAGD_bm; 
 		
 	
 	// Initialize the LCD Controller
-	c42048a_init();
+	lcd_init();
 	
 	// Enable interrupts
 	sei();
@@ -285,20 +361,6 @@ void sysclk_init(void) {
 } 
 
 
-void pmic_init(void) {
-	
-	//////////////////////////////////////////////////////////////////////
-	//PMIC.CTRL
-	//     7       6       5       4       3        2         1         0
-	// | RREN  | IVSEL |   -   |   -   |   -   | HILVLEN | MEDLVLEN | LOLVLEN |
-	//     0       0       0       0       0        0         0         0
-	// Enable all interrupt levels
-	// Load Int vectors to application section of flash
-	// Set interrupt priority to Static (lower address = higher priority)
-	PMIC.CTRL = PMIC_HILVLEN_bm | PMIC_MEDLVLEN_bm | PMIC_LOLVLEN_bm; //0x07
-	//////////////////////////////////////////////////////////////////////
-	
-}
 
 void board_init(void) {
 	
