@@ -10,6 +10,8 @@
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
 
+#include "lcd.h"
+
 #define F_CPU 2000000		// Default internal RC clock on startup
 
 
@@ -64,9 +66,12 @@ void lcd_init(void) {
 	// Frame Rate set to 64 Hz
 	// LP Wave Enabled
 	// 1/4 Duty, 1/3 Bias, COM[0:3] used
-	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm | LCD_LPWAV_bm; //0xB8
+	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //0xB8
+//	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm | LCD_LPWAV_bm; //0xB8
 	//////////////////////////////////////////////////////////////////////
 	
+    //TODO: Check impact of low power waveform here
+    
 	//////////////////////////////////////////////////////////////////////
 	//LCD.CTRLC
 	//     7       6       5       4        3        2       1       0
@@ -85,9 +90,12 @@ void lcd_init(void) {
 	// Set Frame Complete Interrupt
 	// Default Waveforms:	Int Period = XIME[4:0] + 1
 	// LP Waveform:			Int Period = (XIME[4:0] + 1) * 2
-	LCD.INTCTRL = LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 16 frames with high priority
+	//LCD.INTCTRL = LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 16 frames with high priority
+	LCD.INTCTRL = LCD_XIME4_bm | LCD_XIME3_bm | LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 64 frames with high priority (1 Hz)
 	//////////////////////////////////////////////////////////////////////
 	
+    //TODO: Confirm INT generated every 16 frames = 0.25 sec = 4 Hz
+    //TODO: When we switch to normal run mode, then only INT once per second.
 	
 	//////////////////////////////////////////////////////////////////////
 	//LCD.CTRLD
@@ -95,7 +103,8 @@ void lcd_init(void) {
 	// |   -   |   -   |   -   |   -   | BLINKEN |   -   | BLINKRATE[1:0] |
 	//     0       0       0        0       0        0       0       0
 	// Disable hardware blinking
-	LCD.CTRLD = ~LCD_BLINKEN_bm; // 0x00
+	//LCD.CTRLD = ~LCD_BLINKEN_bm; // 0x00
+    // Not needed, it is off by Default. -JL
 	//////////////////////////////////////////////////////////////////////
 	
 	
@@ -115,6 +124,7 @@ void lcd_init(void) {
 	//  31 corresponds to a segment voltage of approx 3.5V
 	// Default is 0 (3.0V)
 	LCD.CTRLF = 31;
+    //TODO: Check contrast settings
 }
 
 //  Disable unused peripherals to save power
@@ -177,13 +187,7 @@ int main(void)
 	// Enable interrupts
 	sei();
 	
-	// Turn off backlight
-	//lcd_backlight_off();
 	
-	// Turn on AVR Icon
-
-	//lcd_set_pixel(ICON_AVR);
-
 /*	
 	PORTCFG.MPCMASK = 0xFF;
 	PORTA.PIN0CTRL = (PORTA.PIN0CTRL & ~PORT_OPC_gm) | PORT_OPC_PULLUP_gc;
@@ -202,6 +206,77 @@ int main(void)
 	set_sleep_mode( SLEEP_SMODE_PSAVE_gc );
 	
 	sleep_enable();
+    
+    lcd_set_pixel( 0 , 3);
+    lcd_set_pixel( 2 , 3);
+    
+    //while (1); 
+
+    
+    /*
+    while (1) { 
+        
+        for( uint8_t c=0; c< 64; c++ ) {
+            
+           // LCD.CTRLF = c;
+            lcd_set_pixel( 2 , 23);
+            lcd_set_pixel( 0 , 23);
+            sleep_cpu();
+            lcd_clear_pixel( 2 , 1);
+            lcd_clear_pixel( 0 , 1);        
+        }            
+    }        
+    
+    
+    */
+    /*
+    while (1) {
+        
+       
+        
+        for (uint8_t seg=0; seg< LCD_MAX_NBR_OF_SEG; seg++ ) {
+        
+         
+            for(uint8_t pix=0; pix<LCD_MAX_NBR_OF_SEG; pix++ ) {
+                
+                            
+                lcd_set_pixel( seg , pix );
+            
+                sleep_cpu();
+                
+                lcd_clear_pixel( seg , pix );
+            
+                sleep_cpu();
+                
+            
+            }            
+        }            
+        
+        LCD.CTRLA |= LCD_CLRDT_bm; //0x04				
+         sleep_cpu();
+        
+        
+    }
+    
+    */
+    
+    
+    while (1) {
+        for( uint8_t slot=0; slot<12;slot++) {
+        
+            for(uint8_t i=0; i<10; i++ ) {
+            
+                digitOn( slot , i );
+                sleep_cpu();
+                digitOff( slot , i );
+                //sleep_cpu();
+            
+            
+            }            
+            }        
+        
+    }
+            
 
 	
 	while (1) {
@@ -214,42 +289,65 @@ int main(void)
 		
 		sleep_cpu();
 		
-		LCD.CTRLA |= LCD_CLRDT_bm; //0x04		
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04		
 		LCD.DATA1=0xff;
 		
 		sleep_cpu();
 
-		LCD.CTRLA |= LCD_CLRDT_bm; //0x04		
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04		
 		LCD.DATA2=0xff;
 		
 		sleep_cpu();
-		LCD.CTRLA |= LCD_CLRDT_bm; //0x04		
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04		
 		LCD.DATA3=0xff;
 		
 		sleep_cpu();
-		LCD.CTRLA |= LCD_CLRDT_bm; //0x04
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
 		
 		LCD.DATA4=0xff;
 		
 		sleep_cpu();
-		LCD.CTRLA |= LCD_CLRDT_bm; //0x04
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
 		LCD.DATA5=0xff;
 
 		sleep_cpu();
-		LCD.CTRLA |= LCD_CLRDT_bm; //0x04
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
 		LCD.DATA6=0xff;
 
 
 		sleep_cpu();
-		LCD.CTRLA |= LCD_CLRDT_bm; //0x04
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
 		LCD.DATA7=0xff;
         
 		sleep_cpu();
-		LCD.CTRLA |= LCD_CLRDT_bm; //0x04
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
 		LCD.DATA8=0xff;
 
+
+		sleep_cpu();
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
+		LCD.DATA9=0xff;
+
+		sleep_cpu();
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
+		LCD.DATA10=0xff;
+
+		sleep_cpu();
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
+		LCD.DATA11=0xff;
+
+		sleep_cpu();
+		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
+		LCD.DATA12=0xff;
+
+		sleep_cpu();
+		sleep_cpu();
+		sleep_cpu();
+		sleep_cpu();
+		sleep_cpu();
+
 		
-		PORTC.OUTTGL = 0xff;
+		//PORTC.OUTTGL = 0xff;
 	
 	
 		//set_sleep_mode( SLEEP_SMODE_PDOWN_gc );
