@@ -54,7 +54,9 @@ void lcd_init(void) {
 	// | ENABLE | XBIAS | DATCLK | COMSWP | SEGSWP | CLRDT | SEGON | BLANK|
 	//     0        0       0        0        0        0       0       0
 	// Clear the display memory
-	LCD.CTRLA = LCD_CLRDT_bm; //0x04
+	//LCD.CTRLA = LCD_CLRDT_bm; //0x04 - internal charge pump
+    	LCD.CTRLA = LCD_XBIAS_bm | LCD_CLRDT_bm; //0x04 - external bias voltage
+
 	//////////////////////////////////////////////////////////////////////
 	
 	
@@ -66,8 +68,9 @@ void lcd_init(void) {
 	// Frame Rate set to 64 Hz
 	// LP Wave Enabled
 	// 1/4 Duty, 1/3 Bias, COM[0:3] used
-	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //0xB8
-//	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm | LCD_LPWAV_bm; //0xB8
+//	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //0xB8 -0 No Low Power, prescale 0 so 125Hz frame rate
+//	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //0xB8 -0 No Low Power
+	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm | LCD_LPWAV_bm; //0xB8
 	//////////////////////////////////////////////////////////////////////
 	
     //TODO: Check impact of low power waveform here
@@ -91,7 +94,8 @@ void lcd_init(void) {
 	// Default Waveforms:	Int Period = XIME[4:0] + 1
 	// LP Waveform:			Int Period = (XIME[4:0] + 1) * 2
 	//LCD.INTCTRL = LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 16 frames with high priority
-	LCD.INTCTRL = LCD_XIME4_bm | LCD_XIME3_bm | LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 64 frames with high priority (1 Hz)
+	
+    LCD.INTCTRL = LCD_XIME4_bm | LCD_XIME3_bm | LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 64 frames with high priority (1 Hz)
 	//////////////////////////////////////////////////////////////////////
 	
     //TODO: Confirm INT generated every 16 frames = 0.25 sec = 4 Hz
@@ -123,7 +127,7 @@ void lcd_init(void) {
 	//   0 corresponds to a segment voltage of approx 3.0V
 	//  31 corresponds to a segment voltage of approx 3.5V
 	// Default is 0 (3.0V)
-	LCD.CTRLF = 31;
+	LCD.CTRLF = 0;
     //TODO: Check contrast settings
 }
 
@@ -207,13 +211,13 @@ int main(void)
 	
 	sleep_enable();
     
-    lcd_set_pixel( 0 , 3);
-    lcd_set_pixel( 2 , 3);
+    //lcd_set_pixel( 0 , 3);
+    //lcd_set_pixel( 2 , 3);
     
     //while (1); 
 
-    
     /*
+    
     while (1) { 
         
         for( uint8_t c=0; c< 64; c++ ) {
@@ -230,6 +234,7 @@ int main(void)
     
     */
     /*
+    
     while (1) {
         
        
@@ -257,23 +262,55 @@ int main(void)
         
         
     }
-    
     */
+    
+
+
+   uint8_t count=0;
+            
+    while(1) {
+        
+        for( uint8_t slot=0; slot<12;slot++) {
+                    
+            digitOn( (11-slot) , ( slot  + count) % 10 );
+                
+        }                
+
+        sleep_cpu();
+        
+        for( uint8_t slot=0; slot<12;slot++) {
+                    
+            digitOff( (11-slot) , ( slot  + count) % 10 );
+                
+        }                
+        count++;
+    }        
+    
+    
     
     
     while (1) {
-        for( uint8_t slot=0; slot<12;slot++) {
         
-            for(uint8_t i=0; i<10; i++ ) {
+        for(uint8_t i=0; i<12; i++ ) {
+                
+        
+            for( uint8_t slot=0; slot<12;slot++) {
+                    
+                digitOn( slot , 12-slot );
+                
+            }                
             
-                digitOn( slot , i );
-                sleep_cpu();
+            //while(1);
+            
+            sleep_cpu();
+            
+            for( uint8_t slot=0; slot<12;slot++) {
+                    
                 digitOff( slot , i );
-                //sleep_cpu();
-            
-            
-            }            
-            }        
+                
+            }                
+            sleep_cpu();
+        }        
         
     }
             
