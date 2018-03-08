@@ -48,6 +48,10 @@ void digitOn( uint8_t d,  uint8_t n );
 
 void digitOff( uint8_t d,  uint8_t n );
 
+// Blank out the specified digit
+
+void digitBlank( uint8_t d );
+
 
 // Set or clear segments to show digit
 void digitShow( uint8_t d,  uint8_t n );

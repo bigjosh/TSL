@@ -225,8 +225,13 @@ inline void showNowH(  uint8_t h ) {
 
     t = h/10;
     digitShow( 4 , h  - (t*10) );
-    digitShow( 5 , t );
 
+    if (t) {
+        digitShow( 5 , t );
+    }
+
+    // We do not need to explicitly blank the tens digit since we
+    // always clear it on day increment and it only monotonically increments.
 
 }
 
@@ -239,6 +244,7 @@ void run() {
 
     showNowD( d );
 
+        digitBlank( 5 );        // Clear the residual leading '2' from the hours-tens digit.
 
         for( uint8_t h=0; h<24; h++ ) {
 
@@ -473,6 +479,10 @@ int main(void)
     }
     */
 
+    // Clear out whatever was left from the countdown so we can assume all
+    // all blank digits in run()
+
+    clearLCD();
     run();
 
    uint8_t count=0;

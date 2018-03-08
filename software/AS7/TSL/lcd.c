@@ -318,6 +318,16 @@ void digitOff( uint8_t d,  uint8_t n ) {
     }
 }
 
+// Blank out the specified digit
+
+void digitBlank( uint8_t d ) {
+        
+    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments in the digit
+                                
+        lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );            
+    }
+}
+
 
 // Display the decimal digit n (0-9) at position d (0-11 where 0 is leftmost) dark if onFlag, light if not 
 
