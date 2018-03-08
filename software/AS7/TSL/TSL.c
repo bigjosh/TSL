@@ -54,8 +54,8 @@ void lcd_init(void) {
 	// | ENABLE | XBIAS | DATCLK | COMSWP | SEGSWP | CLRDT | SEGON | BLANK|
 	//     0        0       0        0        0        0       0       0
 	// Clear the display memory
-	//LCD.CTRLA = LCD_CLRDT_bm; //0x04 - internal charge pump
-    	LCD.CTRLA = LCD_XBIAS_bm | LCD_CLRDT_bm; //0x04 - external bias voltage
+	LCD.CTRLA = LCD_CLRDT_bm; //0x04 - internal charge pump
+    	//LCD.CTRLA = LCD_XBIAS_bm | LCD_CLRDT_bm; //0x04 - external bias voltage
 
 	//////////////////////////////////////////////////////////////////////
 	
@@ -119,7 +119,7 @@ void lcd_init(void) {
 	//     0        0       0        0        0        0       0       0
 	// Enable LCD
 	// Enable all LCD segments
-	LCD.CTRLA |= LCD_ENABLE_bm | LCD_SEGON_bm; // 0x82
+	LCD.CTRLA |= LCD_ENABLE_bm | LCD_SEGON_bm | LCD_CLRDT_bm; // 0x82
 	//////////////////////////////////////////////////////////////////////
 	
 	// set LCD contrast with signed int value between -32 ~ 31
@@ -140,7 +140,160 @@ void prr_init() {
     // TODO: DO we need to RTC? I think we have to track it ourselves anyway and increment off the LCD interrupt
     
     PR.PRGEN = PR_USB_bm | PR_AES_bm | PR_EVSYS_bm | PR_DMA_bm;   
+    
+    
+    // These following lines reduce power consumption durring active mode
+    // I do not understand why there are separate registers for the different ports. 
+    PR.PRPA = PR_ADC_bm | PR_AC_bm;
+    PR.PRPB = PR_ADC_bm | PR_AC_bm;
+    PR.PRPC = PR_TWI_bm | PR_USART0_bm | PR_SPI_bm | PR_HIRES_bm | PR_TC1_bm | PR_TC0_bm;
+    PR.PRPE = PR_TWI_bm | PR_USART0_bm | PR_SPI_bm | PR_HIRES_bm | PR_TC1_bm | PR_TC0_bm;
+    
 }    
+
+// Disable JTAG interface as per 4.18.6
+// Note that this does not seem to save any power, but it couldn't hurt neither. 
+
+void inline disableJTAG() {
+       
+    CCP = CCP_IOREG_gc;          // Enable change to IOREG 
+    MCU.MCUCR = MCU_JTAGD_bm;    // Setting this bit will disable the JTAG interface
+}    
+
+inline void clearLCD() {
+	LCD.CTRLA |= LCD_ENABLE_bm | LCD_SEGON_bm | LCD_CLRDT_bm; // 0x82
+}    
+
+inline void lcd_1hz(void) {
+    LCD.INTCTRL = LCD_XIME4_bm | LCD_XIME3_bm | LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 64 frames with high priority (1 Hz)    
+}   
+
+inline void lcd_2hz() {
+	LCD.INTCTRL = LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 16 frames with high priority - 2Hz
+	
+    
+}     
+
+inline void showNowD( uint16_t d ) {
+
+    for( uint8_t i = 0; i< 6; i++ ) {
+                    
+        uint16_t next = d / 10; 
+            
+        uint8_t ones = d-(next*10); 
+            
+        digitShow( 6+i , ones );
+            
+        d = next;
+            
+    }            
+    
+    
+}    
+
+inline void showNowS( uint8_t s) {
+    
+    // TODO: We need to write some code to write some code here.
+    // We need to figure out the minimum segment transition from second to second
+    // and emit the code to implement those transisions directly. 
+   
+    
+    uint8_t t;
+
+    t = s/10;         
+    digitShow( 0 , s  - (t*10) );
+    digitShow( 1 , t );
+                    
+}    
+
+inline void showNowM( uint8_t m) {
+    
+    uint8_t t;
+                
+    t = m/10;         
+    digitShow( 2 , m  - (t*10) );
+    digitShow( 3 , t );
+    
+}    
+
+inline void showNowH(  uint8_t h ) {
+    
+    uint8_t t;
+
+    t = h/10;         
+    digitShow( 4 , h  - (t*10) );
+    digitShow( 5 , t );
+        
+    
+}    
+
+
+void run() {
+    
+    uint8_t ff_mode=0;
+    
+    for( uint16_t d=0; d< UINT16_MAX; d++ ) {
+        
+    showNowD( d );
+        
+        
+        for( uint8_t h=0; h<24; h++ ) {
+            
+        showNowH(h);
+            
+            
+            for( uint8_t m=0; m<60; m++ ) {
+                
+                // Only check for trigger pin pressed at the end of each minute
+                
+                // We enable the pullup BEFORE drawing the digits because it takes more than 0.5uA for the pull-up
+                // to pull up when the switch is open. 
+                
+                PORTD.PIN0CTRL = PORT_OPC_PULLUP_gc;        // Enable pull-up on trigger pin
+
+
+                showNowM(m);
+
+                
+                if (PORTD.IN & _BV( 0 ) ) {      // Pin pressed?
+                    ff_mode=1;
+                } else {
+                    PORTD.PIN0CTRL = 0;        // Disable pull-up on trigger pin
+                }                    
+                
+                
+                                
+                for( uint8_t s=0; s<60; s++ ) {
+                    
+                    showNowS(s );
+                    
+                    if (!ff_mode) {
+                        
+                        sleep_cpu();
+                        
+                    } else {
+                        
+                        if ( ! (PORTD.IN & _BV( 0 ))  ) {     // Repeat until pin released - 
+                            
+                            // Pin released, so exit FF mode
+                            
+                            ff_mode=0;
+                            PORTD.PIN0CTRL = 0;        // Disable pull-up on trigger pin
+                            
+                            
+                        }                            
+                        
+                    }                                                                                       
+                    
+                }
+                
+                
+
+            }
+        }
+    }
+}                                                            
+            
 
 /////////////////////////////////////////////////////////////////////
 // The main function follows a work flow that has been standardized
@@ -163,34 +316,24 @@ int main(void)
     // Configure System and Peripheral Clocks
     //sysclk_init();
     
-    
+       
     // Disable unused peripherals to save power
     prr_init();
+    disableJTAG();
 	
 
-    // TODO: These are just for debug output. Get rid of them. 
-	PORTC.DIR = 0xff;
-	PORTC.OUT = 0xff;
-	
     // Enable the ultra low power RTC clock
     // We will drive the LCD from this
 	enable_rtc();           
-	
 	// Configure Interrupt Priority Level and Location of Vectors
 	pmic_init();
 	
-	// Enable change to protected IO reg
-	//CCP = 0xD8; 
-	// TODO: Disable JTAG for lower power
-	//MCU_MCUCR = MCU_JTAGD_bm; 
-		
 	
 	// Initialize the LCD Controller
 	lcd_init();
 	
 	// Enable interrupts
 	sei();
-	
 	
 /*	
 	PORTCFG.MPCMASK = 0xFF;
@@ -208,13 +351,76 @@ int main(void)
 
 	//set_sleep_mode( SLEEP_SMODE_IDLE_gc);
 	set_sleep_mode( SLEEP_SMODE_PSAVE_gc );
-	
+    	
 	sleep_enable();
     
     //lcd_set_pixel( 0 , 3);
     //lcd_set_pixel( 2 , 3);
     
     //while (1); 
+    
+    
+    // NOW WE WAIT FOR TRIGGER PIN TO BE PRESSED
+    
+    PORTD.PIN0CTRL = PORT_OPC_PULLUP_gc;        // Enable pull-up on trigger pin
+    
+    uint8_t s=0;
+    
+    lcd_2hz();
+    
+    do {
+        clearLCD();
+        for( uint8_t d=0;d<12;d+=2) {
+            figure8On( d , s );
+            figure8On( d+1 , (s+6)%8 );            
+        }           
+        
+        sleep_cpu();
+        
+        
+        s++;
+        
+        if (s==8) {
+            s=0;
+        }                            
+        
+    } while ( !(PORTD.IN & _BV( 0 ) ));     // Repeat until pin pressed
+    
+    // PRESSED - ARMED AND READY!
+    
+    lcd_1hz();    
+    
+    
+    // TRIGGERED!
+               
+    lcd_1hz();
+    
+    uint8_t n=9;
+    uint8_t d=11;
+
+    do {
+        clearLCD();
+        digitShow( d , n ); 
+        
+        sleep_cpu();
+
+        if (n==0) {
+            n=9;
+        } else {
+            n--;
+        }                                
+        
+        if (d==0) {
+            d=11;
+        } else {
+            d--;
+        }                        
+        
+    } while ( (PORTD.IN & _BV( 0 )) );     // Repeat until pin released - 
+
+
+    PORTD.PIN0CTRL = 0;        // Disable pull-up on trigger pin
+
 
     /*
     
@@ -264,7 +470,7 @@ int main(void)
     }
     */
     
-
+    run();
 
    uint8_t count=0;
             
@@ -276,7 +482,12 @@ int main(void)
                 
         }                
 
+    while (1) {
         sleep_cpu();
+        LCD.DATA0 = 0xff;
+        sleep_cpu();
+        LCD.DATA0 = 0x00;
+    }        
         
         for( uint8_t slot=0; slot<12;slot++) {
                     
@@ -401,113 +612,9 @@ int main(void)
 // on the frame rate of the LCD. It can be used
 // as a miscellaneous timer by the user since it
 // occurs at a constant rate.
-ISR(LCD_INT_vect)
-{
-		//PORTC.OUTTGL = 0xff;
-	
-	/*
-	static uint8_t step=0;
-	
-	switch(step) {
 
-	// Turn on each Bar segment
-		case 0: lcd_set_pixel(ICON_LEVEL_1); lcd_clear_pixel(ICON_LEVEL_2); break;
-		case 1: lcd_set_pixel(ICON_LEVEL_2); lcd_clear_pixel(ICON_LEVEL_3); break;		
-		case 2: lcd_set_pixel(ICON_LEVEL_3); lcd_clear_pixel(ICON_LEVEL_4); break;
-		case 3: lcd_set_pixel(ICON_LEVEL_4); lcd_clear_pixel(ICON_LEVEL_5); break;
-		case 4: lcd_set_pixel(ICON_LEVEL_5); lcd_clear_pixel(ICON_LEVEL_1); break;
-	}
-	
-	step++;
-	
-	if (step==5) step=0;
-	*/
-	
-	
-}
+// We leave it emptry and just do all our processing when it returns. 
+// It would be nice to avoid this alltoether, but I do not think it is possible on AVR.
 
-void sysclk_init(void) {
-	
-	// Assume operation from internal RC oscillator (2 MHz)
-	
-	// Assign pointer to Power Reduction Register
-	uint8_t *reg = (uint8_t *)&PR.PRGEN;
-	uint8_t i;
-	
-	// Turn off all peripheral clocks (initially) to conserve power
-	for (i = 0; i <= 6; i++) {
-		*(reg++) = 0xFF;
-	}
-	
-	//////////////////////////////////////////////////////////////////////
-	//OSC.PLLCTRL
-	//     7       6       5       4       3        2        1        0
-	// |  PLLSRC[1:0]  | PLLDIV |              PLLFAC[4:0]                 |
-	//     0       0       0       0       0        0        0        0
-	// Set 2MHz Internal RC Osc as PLL source
-	// Set PLL to 16MHz
-	//OSC.PLLCTRL = OSC_PLLSRC_RC2M_gc | OSC_PLLFAC3_bm; // 0x08
-	//////////////////////////////////////////////////////////////////////
-	 
-	//////////////////////////////////////////////////////////////////////
-	//OSC.CTRL
-	//     7       6       5       4        3        2         1        0
-	// |   -   |   -   |   -   | PLLEN | XOSCEN | RC32KEN | RC32MEN | RC2MEN |
-	//     0       0       0       0        0        0         0        0
-	// Enable PLL
-	// Clock Source and Multiplication Factor must be selected in PLLCTRL
-	// before setting this bit.
-	//OSC.CTRL |= OSC_PLLEN_bm; // 0x10
-	////////////////////////////////////////////////////////////////////// 
-	
-	//////////////////////////////////////////////////////////////////////
-	//OSC.STATUS
-	//     7       6       5        4        3         2          1          0
-	// |   -   |   -   |   -   | PLLRDY | XOSCRDY | RC32KRDY | RC32MRDY | RC2MRDY |
-	//     0       0       0        0        0         0          0          0
-	// Wait for PLL to stabilize
-	//while (0 == (OSC.STATUS & OSC_PLLRDY_bm)); // wait for STATUS reg to read 0x10
-	////////////////////////////////////////////////////////////////////// 
-	
-	//////////////////////////////////////////////////////////////////////
-	//CLK.PSCTRL
-	//     7       6       5       4       3       2       1       0
-	// |   -   |               PSADIV[4:0]             |    PSBCDIV    |
-	//     0       0       0       0       0       0       0       0
-	// Enable change on protected I/O reg
-	//CONFIGURATION_CHANGE_PROTECTION;
-	// Set Clk_per4 equal to 8 MHz
-	//CLK.PSCTRL = CLK_PSADIV0_bm; // 0x04
-	// Leaving CLK_PSBCDIV[1:0] with default value (b'00') sets
-	// Clk_per2, Clk_per, and Clk_cpu equal to Clk_per4 (8 MHz)
-	//////////////////////////////////////////////////////////////////////
-	
-	//////////////////////////////////////////////////////////////////////
-	//CLK.CTRL
-	//     7       6       5       4       3       2       1       0
-	// |   -   |   -   |   -   |   -   |   -   |      SCLKSEL[2:0]    |
-	//     0       0       0       0       0       0       0       0
-	// Enable change on protected I/O reg
-	//CONFIGURATION_CHANGE_PROTECTION;
-	// Set PLL as sys clk source
-	//CLK.CTRL = CLK_SCLKSEL2_bm; // 0x04
-	//////////////////////////////////////////////////////////////////////
-	
-} 
-
-
-
-void board_init(void) {
-	
-	// LED Pins set to Outputs
-	// Sensor Pins set to Inputs
-	//PORTB.DIR = 0xF0;
-	//PORTB.OUTSET = 0xF0; //4 LEDs Off
-	
-	// QTouch button pins, LCD Backlight pin,
-	// and Power LED pin set to output 
-	// (QTouch buttons will not work in this configuration)
-	//PORTE.DIR = 0xFF;
-	//PORTE.OUTSET = 0xFF; //Power LED On, LCD Backlight On
-}
+EMPTY_INTERRUPT(LCD_INT_vect);
 

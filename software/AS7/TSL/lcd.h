@@ -48,6 +48,10 @@ void digitOn( uint8_t d,  uint8_t n );
 
 void digitOff( uint8_t d,  uint8_t n );
 
+
+// Set or clear segments to show digit
+void digitShow( uint8_t d,  uint8_t n );
+
 // Display the decimal digit n (0-9) at position d (0-11 where 0 is leftmost) dark if onFlag, light if not
 
 void displaydigit( uint8_t d,  uint8_t n , uint8_t onFlag);

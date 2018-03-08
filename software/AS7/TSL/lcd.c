@@ -16,25 +16,21 @@
 
 
 // This function is used to turn on individual icons on the display.
-void lcd_set_pixel(uint8_t pix_com, uint8_t pix_seg) {
-	if ((pix_com < LCD_MAX_NR_OF_COM) && (pix_seg < LCD_MAX_NBR_OF_SEG)) {
-		register8_t *pixreg = (register8_t *)((uint16_t)&LCD.DATA0)
-		+ (pix_com * ((LCD_MAX_NBR_OF_SEG + 7) / 8))
-		+ (pix_seg / 8);
+inline void lcd_set_pixel(uint8_t pix_com, uint8_t pix_seg) {
+	register8_t *pixreg = (register8_t *)((uint16_t)&LCD.DATA0)
+	+ (pix_com * ((LCD_MAX_NBR_OF_SEG + 7) / 8))
+	+ (pix_seg / 8);
 
-		*pixreg |= 1 << (pix_seg % 8);
-	}
+	*pixreg |= 1 << (pix_seg % 8);
 }
 
 // This function is used to turn off individual icons on the display.
-void lcd_clear_pixel(uint8_t pix_com, uint8_t pix_seg) {
-	if ((pix_com < LCD_MAX_NR_OF_COM) && (pix_seg < LCD_MAX_NBR_OF_SEG)) {
-		register8_t *pixreg = (register8_t *)((uint16_t)&LCD.DATA0)
-		+ (pix_com * ((LCD_MAX_NBR_OF_SEG + 7) / 8))
-		+ (pix_seg / 8);
+inline void lcd_clear_pixel(uint8_t pix_com, uint8_t pix_seg) {
+	register8_t *pixreg = (register8_t *)((uint16_t)&LCD.DATA0)
+	+ (pix_com * ((LCD_MAX_NBR_OF_SEG + 7) / 8))
+	+ (pix_seg / 8);
 
-		*pixreg &= ~(1 << (pix_seg % 8));
-	}
+	*pixreg &= ~(1 << (pix_seg % 8));
 }
 
 
@@ -276,6 +272,24 @@ void figure8Off( uint8_t d,  uint8_t s ) {
 }
 
 
+
+void digitShow( uint8_t d,  uint8_t n ) {
+    
+    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+    
+    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
+        
+        if ( ( 1 << seg ) & segementBitsInThisDigit ) { 
+            
+            lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+                        
+        } else {
+            lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );            
+        }            
+    }
+}    
+
+
 void digitOn( uint8_t d,  uint8_t n ) {
     
     uint8_t segementBitsInThisDigit = lcd_font[ n ];
@@ -286,7 +300,7 @@ void digitOn( uint8_t d,  uint8_t n ) {
             
             lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
                         
-        }            
+        }        
     }
 }    
 
@@ -303,6 +317,7 @@ void digitOff( uint8_t d,  uint8_t n ) {
         }
     }
 }
+
 
 // Display the decimal digit n (0-9) at position d (0-11 where 0 is leftmost) dark if onFlag, light if not 
 
