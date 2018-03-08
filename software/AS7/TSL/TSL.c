@@ -176,7 +176,9 @@ inline void lcd_2hz() {
 
 inline void showNowD( uint16_t d ) {
 
-    for( uint8_t i = 0; i< 6; i++ ) {
+    uint8_t i=0;
+
+    while ( d > 0 && i < 6 ) {      // Don't show leading zeros. No need to wipe because digits only go up.
 
         uint16_t next = d / 10;
 
@@ -184,10 +186,11 @@ inline void showNowD( uint16_t d ) {
 
         digitShow( 6+i , ones );
 
+        i++;
+
         d = next;
 
     }
-
 
 }
 
