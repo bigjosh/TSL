@@ -14,6 +14,8 @@
 
 #define F_CPU 2000000		// Default internal RC clock on startup
 
+#include <util/delay.h>
+
 
 void enable_rtc() {
 
@@ -170,9 +172,14 @@ inline void lcd_1hz(void) {
 
 inline void lcd_2hz() {
 	LCD.INTCTRL = LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 16 frames with high priority - 2Hz
-
-
 }
+
+// Interrupt (or set FCIF flags) every time a frame is complete
+
+inline void lcd_1frame() {
+    LCD.INTCTRL = LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 16 frames with high priority - 2Hz
+}
+
 
 inline void showNowD( uint16_t d ) {
 
@@ -255,7 +262,7 @@ void run() {
 
                 // Only check for trigger pin pressed at the end of each minute
 
-                // We enable the pullup BEFORE drawing the digits because it takes more than 0.5uA for the pull-up
+                // We enable the pullup BEFORE drawing the digits because it takes more than 0.5us for the pull-up
                 // to pull up when the switch is open.
 
                 PORTD.PIN0CTRL = PORT_OPC_PULLUP_gc;        // Enable pull-up on trigger pin
@@ -304,6 +311,64 @@ void run() {
 }
 
 
+void FlashFetInit(void) {
+    PORTD.DIR |= _BV(1);        // FET connected to PORTD1
+    // No will be driving low, which keeps the flash lamp off
+}    
+
+void FlashFetOn() {    
+    PORTD.OUTSET |= _BV(1);    
+}
+
+void FlashFetOff() {
+    PORTD.OUTCLR |= _BV(1);
+}        
+
+void triggerPinDisable() {
+    
+    PORTD_INT0MASK &= ~PIN0_bm;    // Disable interrupt 
+    PORTD.PIN0CTRL = 0;            // Disable pull-up on trigger pin    
+    
+}
+
+
+void triggerPinEnable() {
+    PORTD.PIN0CTRL = PORT_OPC_PULLUP_gc | PORT_ISC_BOTHEDGES_gc ;        // Enable pull-up on trigger pin    
+        
+    _delay_ms(1);          // Give the pullup a moment to do its thing        
+    PORTD.INTCTRL = PORT_INT0LVL0_bm;
+    PORTD_INT0MASK |= PIN0_bm;
+}        
+
+void triggerPinInit() {
+    triggerPinEnable();
+}    
+
+inline uint8_t triggerPinPressed() {
+    return(  PORTD.IN & _BV(0) );
+}    
+    
+ISR(PORTD_INT0_vect){
+}    
+     
+ 
+// Wait for next LCD frame to start
+// not needed if we are sleeping since the interrupt will
+// wake us at the begining of the frame anyway
+    
+    
+/* THIS DOES NOT SEEM TO WORK
+    
+void inline verticalRetrace() {
+    //This bit is set by hardware at the beginning of a frame.
+    while ( ! LCD.INTFLAG & LCD_FCIF_bm );
+            
+    //writing a logical one to the flag clears FCIF.
+    LCD.INTFLAG  |= LCD_FCIF_bm;
+}            
+
+*/
+
 /////////////////////////////////////////////////////////////////////
 // The main function follows a work flow that has been standardized
 // within the ASF for Xmega devices. This means that when searching
@@ -325,11 +390,11 @@ int main(void)
     // Configure System and Peripheral Clocks
     //sysclk_init();
 
+    FlashFetInit();
 
     // Disable unused peripherals to save power
     prr_init();
     disableJTAG();
-
 
     // Enable the ultra low power RTC clock
     // We will drive the LCD from this
@@ -342,6 +407,7 @@ int main(void)
 	lcd_init();
 
 	// Enable interrupts
+    PMIC.CTRL |= PMIC_LOLVLEN_bm;
 	sei();
 
 /*
@@ -370,8 +436,8 @@ int main(void)
 
 
     // NOW WE WAIT FOR TRIGGER PIN TO BE PRESSED
-
-    PORTD.PIN0CTRL = PORT_OPC_PULLUP_gc;        // Enable pull-up on trigger pin
+    
+    triggerPinInit();
 
     uint8_t s=0;
 
@@ -393,25 +459,27 @@ int main(void)
             s=0;
         }
 
-    } while ( !(PORTD.IN & _BV( 0 ) ));     // Repeat until pin pressed
+    } while ( !triggerPinPressed() );     // Repeat until pin pressed
 
     // PRESSED - ARMED AND READY!
-
-    lcd_1hz();
-
-
-    // TRIGGERED!
-
-    lcd_1hz();
+    
+    clearLCD();
+    
+    _delay_ms(100);     // Debounce switch
+    
+    lcd_1hz();          // Generate interrupt once per second
 
     uint8_t n=9;
     uint8_t d=11;
 
+    // Show a marching countdown pattern until pin released...
+
     do {
+        
         clearLCD();
         digitShow( d , n );
 
-        sleep_cpu();
+        sleep_cpu();        // We will wake on next second, or when switch changes state
 
         if (n==0) {
             n=9;
@@ -425,60 +493,30 @@ int main(void)
             d--;
         }
 
-    } while ( (PORTD.IN & _BV( 0 )) );     // Repeat until pin released -
+    } while ( triggerPinPressed() );     // Repeat until pin released 
 
+    triggerPinDisable();           // So we do not waste current running though pull up and the switch forevermore....
 
-    PORTD.PIN0CTRL = 0;        // Disable pull-up on trigger pin
+    
+    // Flash
 
+    FlashFetOn();
+    _delay_ms(20);
+    FlashFetOff();
+    
+    // and fade...
+    
+    for( uint8_t b=100; b>0; b-- ) {
+        
+        FlashFetOn();
+        
+        for( uint8_t d=b; d; d-- ) _delay_us(10);
+        FlashFetOff();
+        for( uint8_t d=100-b; d; d-- ) _delay_us(10);
+                
+    }        
 
-    /*
-
-    while (1) {
-
-        for( uint8_t c=0; c< 64; c++ ) {
-
-           // LCD.CTRLF = c;
-            lcd_set_pixel( 2 , 23);
-            lcd_set_pixel( 0 , 23);
-            sleep_cpu();
-            lcd_clear_pixel( 2 , 1);
-            lcd_clear_pixel( 0 , 1);
-        }
-    }
-
-
-    */
-    /*
-
-    while (1) {
-
-
-
-        for (uint8_t seg=0; seg< LCD_MAX_NBR_OF_SEG; seg++ ) {
-
-
-            for(uint8_t pix=0; pix<LCD_MAX_NBR_OF_SEG; pix++ ) {
-
-
-                lcd_set_pixel( seg , pix );
-
-                sleep_cpu();
-
-                lcd_clear_pixel( seg , pix );
-
-                sleep_cpu();
-
-
-            }
-        }
-
-        LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-         sleep_cpu();
-
-
-    }
-    */
-
+    
     // Clear out whatever was left from the countdown so we can assume all
     // all blank digits in run()
 
