@@ -243,6 +243,35 @@ inline void showNowH(  uint8_t h ) {
 }
 
 
+void triggerPinDisable() {
+
+    PORTC_INT0MASK &= ~PIN7_bm;    // Disable interrupt
+    PORTC.PIN7CTRL = 0;            // Disable pull-up on trigger pin
+
+}
+
+
+void triggerPinEnable() {
+    PORTC.PIN7CTRL = PORT_OPC_PULLUP_gc | PORT_ISC_BOTHEDGES_gc ;        // Enable pull-up on trigger pin
+
+    _delay_ms(1);          // Give the pullup a moment to do its thing
+    PORTC.INTCTRL = PORT_INT0LVL0_bm;
+    PORTC_INT0MASK |= PIN7_bm;
+}
+
+void triggerPinInit() {
+    triggerPinEnable();
+}
+
+inline uint8_t triggerPinPressed() {
+    return(  PORTC.IN & _BV(7) );
+}
+
+EMPTY_INTERRUPT(PORTC_INT0_vect);       // Trigger pin ISR. We don't care about ISR, just want to have the interrupt to wake us up.
+
+
+
+
 void run() {
 
     uint8_t ff_mode=0;
@@ -265,16 +294,14 @@ void run() {
                 // We enable the pullup BEFORE drawing the digits because it takes more than 0.5us for the pull-up
                 // to pull up when the switch is open.
 
-                PORTD.PIN0CTRL = PORT_OPC_PULLUP_gc;        // Enable pull-up on trigger pin
-
+                triggerPinEnable();
 
                 showNowM(m);
 
-
-                if (PORTD.IN & _BV( 0 ) ) {      // Pin pressed?
+                if (triggerPinPressed()) {      // Pin pressed?
                     ff_mode=1;
                 } else {
-                    PORTD.PIN0CTRL = 0;        // Disable pull-up on trigger pin
+                    triggerPinDisable();
                 }
 
 
@@ -289,12 +316,13 @@ void run() {
 
                     } else {
 
-                        if ( ! (PORTD.IN & _BV( 0 ))  ) {     // Repeat until pin released -
+                        if ( ! triggerPinPressed() ) {     // Repeat until pin released -
 
                             // Pin released, so exit FF mode
 
                             ff_mode=0;
-                            PORTD.PIN0CTRL = 0;        // Disable pull-up on trigger pin
+
+                            triggerPinDisable(); // Disable pull-up on trigger pin to not waste power
 
 
                         }
@@ -302,70 +330,68 @@ void run() {
                     }
 
                 }
-
-
-
             }
         }
     }
 }
 
 
-void FlashFetInit(void) {
-    PORTD.DIR |= _BV(1);        // FET connected to PORTD1
+
+void FlashFetInit1(void) {
+    PORTD.DIR |= _BV(1);        
     // No will be driving low, which keeps the flash lamp off
-}    
-
-void FlashFetOn() {    
-    PORTD.OUTSET |= _BV(1);    
 }
 
-void FlashFetOff() {
+void FlashFetOn1() {
+    PORTD.OUTSET |= _BV(1);
+}
+
+void FlashFetOff1() {
     PORTD.OUTCLR |= _BV(1);
-}        
+}
 
-void triggerPinDisable() {
-    
-    PORTD_INT0MASK &= ~PIN0_bm;    // Disable interrupt 
-    PORTD.PIN0CTRL = 0;            // Disable pull-up on trigger pin    
-    
+void FlashFetInit2(void) {
+    PORTD.DIR |= _BV(0);        
+    // No will be driving low, which keeps the flash lamp off
+}
+
+void FlashFetOn2() {
+    PORTD.OUTSET |= _BV(0);
+}
+
+void FlashFetOff2() {
+    PORTD.OUTCLR |= _BV(0);
 }
 
 
-void triggerPinEnable() {
-    PORTD.PIN0CTRL = PORT_OPC_PULLUP_gc | PORT_ISC_BOTHEDGES_gc ;        // Enable pull-up on trigger pin    
-        
-    _delay_ms(1);          // Give the pullup a moment to do its thing        
-    PORTD.INTCTRL = PORT_INT0LVL0_bm;
-    PORTD_INT0MASK |= PIN0_bm;
-}        
+void FlashFetInit3(void) {
+    PORTC.DIR |= _BV(6);        
+    // No will be driving low, which keeps the flash lamp off
+}
 
-void triggerPinInit() {
-    triggerPinEnable();
-}    
+void FlashFetOn3() {
+    PORTC.OUTSET |= _BV(6);
+}
 
-inline uint8_t triggerPinPressed() {
-    return(  PORTD.IN & _BV(0) );
-}    
-    
-ISR(PORTD_INT0_vect){
-}    
-     
- 
+void FlashFetOff3() {
+    PORTC.OUTCLR |= _BV(6);
+}
+
+
 // Wait for next LCD frame to start
 // not needed if we are sleeping since the interrupt will
 // wake us at the begining of the frame anyway
-    
-    
+
+
 /* THIS DOES NOT SEEM TO WORK
-    
+
 void inline verticalRetrace() {
     //This bit is set by hardware at the beginning of a frame.
     while ( ! LCD.INTFLAG & LCD_FCIF_bm );
-            
+
     //writing a logical one to the flag clears FCIF.
     LCD.INTFLAG  |= LCD_FCIF_bm;
-}            
+}
 
 */
 
@@ -390,7 +416,9 @@ int main(void)
     // Configure System and Peripheral Clocks
     //sysclk_init();
 
-    FlashFetInit();
+    FlashFetInit1();
+    FlashFetInit2();
+    FlashFetInit3();
 
     // Disable unused peripherals to save power
     prr_init();
@@ -436,7 +464,7 @@ int main(void)
 
 
     // NOW WE WAIT FOR TRIGGER PIN TO BE PRESSED
-    
+
     triggerPinInit();
 
     uint8_t s=0;
@@ -462,11 +490,11 @@ int main(void)
     } while ( !triggerPinPressed() );     // Repeat until pin pressed
 
     // PRESSED - ARMED AND READY!
-    
+
     clearLCD();
-    
+
     _delay_ms(100);     // Debounce switch
-    
+
     lcd_1hz();          // Generate interrupt once per second
 
     uint8_t n=9;
@@ -475,7 +503,7 @@ int main(void)
     // Show a marching countdown pattern until pin released...
 
     do {
-        
+
         clearLCD();
         digitShow( d , n );
 
@@ -493,34 +521,42 @@ int main(void)
             d--;
         }
 
-    } while ( triggerPinPressed() );     // Repeat until pin released 
+    } while ( triggerPinPressed() );     // Repeat until pin released
+
+    clearLCD();
 
     triggerPinDisable();           // So we do not waste current running though pull up and the switch forevermore....
 
-    
     // Flash
 
-    FlashFetOn();
+    FlashFetOn1();
     _delay_ms(20);
-    FlashFetOff();
-    
-    // and fade...
-    
-    for( uint8_t b=100; b>0; b-- ) {
-        
-        FlashFetOn();
-        
-        for( uint8_t d=b; d; d-- ) _delay_us(10);
-        FlashFetOff();
-        for( uint8_t d=100-b; d; d-- ) _delay_us(10);
-                
-    }        
+    FlashFetOff1();
 
-    
+    FlashFetOn2();
+    _delay_ms(20);
+    FlashFetOff2();
+
+    FlashFetOn3();
+    _delay_ms(20);
+    FlashFetOff3();
+
+    // and fade...
+
+    for( uint8_t b=100; b>0; b-=2) {
+
+        FlashFetOn1();
+
+        for( uint8_t d=b; d; d-- ) _delay_us(10);
+        FlashFetOff1();
+        for( uint8_t d=100-b; d; d-- ) _delay_us(10);
+
+    }
+
+
     // Clear out whatever was left from the countdown so we can assume all
     // all blank digits in run()
 
-    clearLCD();
     run();
 
    uint8_t count=0;
