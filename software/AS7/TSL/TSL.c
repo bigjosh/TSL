@@ -27,6 +27,10 @@ void enable_rtc() {
 	// LCD Runs off the RTC
 	// Enable RTC, source from 32kHz internal ULP osc
 	CLK.RTCCTRL = CLK_RTCEN_bm; // 0x01
+
+    // By default "1kHz from 32kHz internal ULP oscillator, but The LCD will always use the non-prescaled 32kHz oscillator output as clock source"
+
+
 	//////////////////////////////////////////////////////////////////////
 }
 
@@ -72,7 +76,11 @@ void lcd_init(void) {
 	// 1/4 Duty, 1/3 Bias, COM[0:3] used
 //	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //0xB8 -0 No Low Power, prescale 0 so 125Hz frame rate
 //	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //0xB8 -0 No Low Power
-	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm | LCD_LPWAV_bm; //0xB8
+	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV2_bm |LCD_CLKDIV1_bm | LCD_CLKDIV0_bm | LCD_LPWAV_bm; //0xB8
+
+    // PRESC divides the 32khz clock /16 into the LCD
+    // Clockdiv 111 further divides it down to 32Hz refresh
+
 	//////////////////////////////////////////////////////////////////////
 
     //TODO: Check impact of low power waveform here
@@ -97,7 +105,11 @@ void lcd_init(void) {
 	// LP Waveform:			Int Period = (XIME[4:0] + 1) * 2
 	//LCD.INTCTRL = LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 16 frames with high priority
 
-    LCD.INTCTRL = LCD_XIME4_bm | LCD_XIME3_bm | LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 64 frames with high priority (1 Hz)
+    LCD.INTCTRL =  LCD_XIME3_bm | LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 32 frames with high priority (1 Hz)
+
+    // For low power waveforms requiring 2 subsequent frames, the FCIF flag is generated every
+    // 2 x ( XIME[4:0] + 1 ) frames. The range is 2 up to 64 frames
+
 	//////////////////////////////////////////////////////////////////////
 
     //TODO: Confirm INT generated every 16 frames = 0.25 sec = 4 Hz
@@ -139,12 +151,12 @@ void prr_init() {
 
     // Disable everything but the LCD & RTC
 
-    // TODO: DO we need to RTC? I think we have to track it ourselves anyway and increment off the LCD interrupt
+    // Disabling RTC does not noticably reduce power
 
-    PR.PRGEN = PR_USB_bm | PR_AES_bm | PR_EVSYS_bm | PR_DMA_bm;
+    PR.PRGEN = PR_USB_bm | PR_AES_bm | PR_EVSYS_bm | PR_DMA_bm | PR_RTC_bm;
 
 
-    // These following lines reduce power consumption durring active mode
+    // These following lines reduce power consumption during active mode
     // I do not understand why there are separate registers for the different ports.
     PR.PRPA = PR_ADC_bm | PR_AC_bm;
     PR.PRPB = PR_ADC_bm | PR_AC_bm;
@@ -166,6 +178,8 @@ inline void clearLCD() {
 	LCD.CTRLA |= LCD_ENABLE_bm | LCD_SEGON_bm | LCD_CLRDT_bm; // 0x82
 }
 
+/*
+
 inline void lcd_1hz(void) {
     LCD.INTCTRL = LCD_XIME4_bm | LCD_XIME3_bm | LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 64 frames with high priority (1 Hz)
 }
@@ -180,6 +194,7 @@ inline void lcd_1frame() {
     LCD.INTCTRL = LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 16 frames with high priority - 2Hz
 }
 
+*/
 
 // Save power by avoiding floating pins. Disables input buffers.
 // Apears to have no effect
@@ -488,7 +503,7 @@ int main(void)
 
     uint8_t s=0;
 
-    lcd_2hz();
+    //lcd_2hz();
 
     do {
         clearLCD();
@@ -514,7 +529,7 @@ int main(void)
 
     _delay_ms(100);     // Debounce switch
 
-    lcd_1hz();          // Generate interrupt once per second
+    //lcd_1hz();          // Generate interrupt once per second
 
     uint8_t n=9;
     uint8_t d=11;
