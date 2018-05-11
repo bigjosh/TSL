@@ -274,11 +274,25 @@ inline void showNowH(  uint8_t h ) {
 
 }
 
+void initTestPins() {
+    
+    // These appear on ISP pins 3 & 4 respectively
+    
+    PORTC.PIN2CTRL = PORT_OPC_PULLUP_gc ;
+    PORTC.PIN3CTRL = PORT_OPC_PULLUP_gc ;   
+}    
+
+
+inline uint8_t testPin3Grounded() {
+ 
+    return ( ! (PORTC.IN & _BV(2) ));
+    
+}     
 
 void triggerPinDisable() {
 
-    PORTC_INT0MASK &= ~PIN7_bm;    // Disable interrupt
-    PORTC.PIN7CTRL = 0;            // Disable pull-up on trigger pin
+    PORTC_INT0MASK &= ~PIN7_bm;                            // Disable interrupt
+    PORTC.PIN7CTRL = PORT_ISC_INPUT_DISABLE_gc;            // Disable pull-up on trigger pin, disable input buffer
 
 }
 
@@ -301,70 +315,35 @@ inline uint8_t triggerPinPressed() {
 
 EMPTY_INTERRUPT(PORTC_INT0_vect);       // Trigger pin ISR. We don't care about ISR, just want to have the interrupt to wake us up.
 
-
-
-
 void run() {
-
-    uint8_t ff_mode=0;
 
     for( uint16_t d=0; d< UINT16_MAX; d++ ) {
 
-    showNowD( d );
+        showNowD( d );
 
         digitBlank( 5 );        // Clear the residual leading '2' from the hours-tens digit.
 
         for( uint8_t h=0; h<24; h++ ) {
 
-        showNowH(h);
-
+            showNowH(h);
 
             for( uint8_t m=0; m<60; m++ ) {
 
-                // Only check for trigger pin pressed at the end of each minute
-
-                // We enable the pullup BEFORE drawing the digits because it takes more than 0.5us for the pull-up
-                // to pull up when the switch is open.
-
-                triggerPinEnable();
-
-                showNowM(m);
-
-                if (triggerPinPressed()) {      // Pin pressed?
-                    ff_mode=1;
-                } else {
-                    triggerPinDisable();
-                }
-
-
+                showNowM(m);                
 
                 for( uint8_t s=0; s<60; s++ ) {
 
-                    showNowS(s );
+                    showNowS( s );
 
-                    if (!ff_mode) {
+                    if (!testPin3Grounded()) {
 
                         sleep_cpu();
 
-                    } else {
-
-                        if ( ! triggerPinPressed() ) {     // Repeat until pin released -
-
-                            // Pin released, so exit FF mode
-
-                            ff_mode=0;
-
-                            triggerPinDisable(); // Disable pull-up on trigger pin to not waste power
-
-
-                        }
-
-                    }
-
-                }
-            }
-        }
-    }
+                    }                     
+                }       // s
+            }           // m 
+        }               // h
+    }                   // d
 }
 
 
@@ -446,6 +425,8 @@ int main(void)
 {
 
     disableUnusedIOPins();
+    
+    initTestPins();         // Set pullups on the 2 extra pins on the ISP
 
     // Configure System and Peripheral Clocks
     //sysclk_init();
@@ -734,7 +715,7 @@ int main(void)
 // as a miscellaneous timer by the user since it
 // occurs at a constant rate.
 
-// We leave it emptry and just do all our processing when it returns.
+// We leave it empty and just do all our processing when it returns.
 // It would be nice to avoid this alltoether, but I do not think it is possible on AVR.
 
 EMPTY_INTERRUPT(LCD_INT_vect);
