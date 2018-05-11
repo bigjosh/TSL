@@ -181,6 +181,23 @@ inline void lcd_1frame() {
 }
 
 
+// Save power by avoiding floating pins. Disables input buffers.
+// Apears to have no effect
+
+void disableUnusedIOPins() {
+
+    PORTB.PIN0CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTB.PIN1CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTB.PIN2CTRL = PORT_ISC_INPUT_DISABLE_gc;
+
+    PORTC.PIN0CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTC.PIN1CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTC.PIN4CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTC.PIN5CTRL = PORT_ISC_INPUT_DISABLE_gc;
+
+}
+
+
 inline void showNowD( uint16_t d ) {
 
     uint8_t i=0;
@@ -338,7 +355,7 @@ void run() {
 
 
 void FlashFetInit1(void) {
-    PORTD.DIR |= _BV(1);        
+    PORTD.DIR |= _BV(1);
     // No will be driving low, which keeps the flash lamp off
 }
 
@@ -351,7 +368,7 @@ void FlashFetOff1() {
 }
 
 void FlashFetInit2(void) {
-    PORTD.DIR |= _BV(0);        
+    PORTD.DIR |= _BV(0);
     // No will be driving low, which keeps the flash lamp off
 }
 
@@ -365,7 +382,7 @@ void FlashFetOff2() {
 
 
 void FlashFetInit3(void) {
-    PORTC.DIR |= _BV(6);        
+    PORTC.DIR |= _BV(6);
     // No will be driving low, which keeps the flash lamp off
 }
 
@@ -412,6 +429,8 @@ void inline verticalRetrace() {
 /////////////////////////////////////////////////////////////////////
 int main(void)
 {
+
+    disableUnusedIOPins();
 
     // Configure System and Peripheral Clocks
     //sysclk_init();
