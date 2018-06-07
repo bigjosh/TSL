@@ -3,7 +3,7 @@
  *
  * Created: 10/25/2017 11:53:48 PM
  *  Author: josh
- */ 
+ */
 
 
 #ifndef LCD_H_
@@ -22,7 +22,7 @@
 
 inline void lcd_on( uint8_t com , uint8_t seg ) {
     LCD_MEM_REG( com ,  seg ) |= LCD_MEM_BIT( com ,  seg );
-}    
+}
 
 inline void lcd_off( uint8_t com , uint8_t seg ) {
     LCD_MEM_REG( com ,  seg ) &= ~LCD_MEM_BIT( com ,  seg );
@@ -35,6 +35,11 @@ void lcd_set_pixel(uint8_t pix_com, uint8_t pix_seg);
 // This function is used to turn off individual icons on the display.
 void lcd_clear_pixel(uint8_t pix_com, uint8_t pix_seg);
 
+// Level is -127 to 127 but there are really only 64 steps
+
+inline void lcd_set_contrast( signed char level ) {
+    LCD.CTRLF = level >> 2;                         // Loose lower 2 bits of resolution, but keep 2's complement bits
+}
 
 void spinOn( uint8_t d, uint8_t step );
 

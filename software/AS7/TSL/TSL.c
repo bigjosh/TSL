@@ -16,8 +16,9 @@
 
 #include <util/delay.h>
 
+typedef __uint24  uint24_t;     // Make 24 bit type look normal
 
-void enable_rtc() {
+void enable_rtc_xtal() {
 
 	//////////////////////////////////////////////////////////////////////
 	//CLK.RTCCTRL
@@ -25,14 +26,62 @@ void enable_rtc() {
 	// |   -   |   -   |   -   |   -   |      RTCSRC[2:0]     |  RTCEN  |
 	//     0       0       0       0       0       0       0       0
 	// LCD Runs off the RTC
-	// Enable RTC, source from 32kHz internal ULP osc
-	CLK.RTCCTRL = CLK_RTCEN_bm; // 0x01
+
+
+	// Enable RTC, source from 32kHz XTAL
+    CCP = CCP_IOREG_gc; //Trigger protection mechanism
+	CLK.RTCCTRL = CLK_RTCEN_bm | CLK_RTCSRC0_bm;
+	// ~2.6uA
 
     // By default "1kHz from 32kHz internal ULP oscillator, but The LCD will always use the non-prescaled 32kHz oscillator output as clock source"
 
 
 	//////////////////////////////////////////////////////////////////////
 }
+
+
+void enable_rtc_ulp() {
+
+    //////////////////////////////////////////////////////////////////////
+    //CLK.RTCCTRL
+    //     7       6       5       4       3       2       1       0
+    // |   -   |   -   |   -   |   -   |      RTCSRC[2:0]     |  RTCEN  |
+    //     0       0       0       0       0       0       0       0
+    // LCD Runs off the RTC
+
+
+    // Enable RTC, source from 32kHz internal ULP osc
+    CLK.RTCCTRL = CLK_RTCEN_bm; // 0x01
+
+
+    // TODO: Try X32KLPM low power xtal drive in XOSCCTRL
+
+    // By default "1kHz from 32kHz internal ULP oscillator, but The LCD will always use the non-prescaled 32kHz oscillator output as clock source"
+
+
+    //////////////////////////////////////////////////////////////////////
+}
+
+void enable_rtc_TOSC1() {
+
+    //////////////////////////////////////////////////////////////////////
+    //CLK.RTCCTRL
+    //     7       6       5       4       3       2       1       0
+    // |   -   |   -   |   -   |   -   |      RTCSRC[2:0]     |  RTCEN  |
+    //     0       0       0       0       0       0       0       0
+    // LCD Runs off the RTC
+
+
+    // Enable RTC from external clock on TOSC1
+    CCP = CCP_IOREG_gc; //Trigger protection mechanism
+    CLK.RTCCTRL = CLK_RTCEN_bm | CLK_RTCSRC_EXTCLK_gc;
+
+
+    // By default "1kHz from 32kHz internal ULP oscillator, but The LCD will always use the non-prescaled 32kHz oscillator output as clock source"
+
+    //////////////////////////////////////////////////////////////////////
+}
+
 
 
 void pmic_init(void) {
@@ -76,7 +125,8 @@ void lcd_init(void) {
 	// 1/4 Duty, 1/3 Bias, COM[0:3] used
 //	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //0xB8 -0 No Low Power, prescale 0 so 125Hz frame rate
 //	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //0xB8 -0 No Low Power
-	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV2_bm |LCD_CLKDIV1_bm | LCD_CLKDIV0_bm | LCD_LPWAV_bm; //0xB8
+	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV2_bm |LCD_CLKDIV1_bm | LCD_CLKDIV0_bm | LCD_LPWAV_bm; //0xB8   2.65uA
+//	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV2_bm |LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //No Low power waveform         3.7uA
 
     // PRESC divides the 32khz clock /16 into the LCD
     // Clockdiv 111 further divides it down to 32Hz refresh
@@ -165,6 +215,18 @@ void prr_init() {
 
 }
 
+void twi_init() {
+
+    // Enable pull-ups so we don't need extra resistors
+
+    PORTC.PIN0CTRL = PORT_OPC_PULLUP_gc;
+    PORTC.OUT |= _BV(0);
+
+    PORTC.PIN1CTRL = PORT_OPC_PULLUP_gc;
+    PORTC.OUT |= _BV(1);
+
+}
+
 // Disable JTAG interface as per 4.18.6
 // Note that this does not seem to save any power, but it couldn't hurt neither.
 
@@ -197,7 +259,7 @@ inline void lcd_1frame() {
 */
 
 // Save power by avoiding floating pins. Disables input buffers.
-// Apears to have no effect
+// appears to have no effect
 
 void disableUnusedIOPins() {
 
@@ -213,7 +275,7 @@ void disableUnusedIOPins() {
 }
 
 
-inline void showNowD( uint16_t d ) {
+inline void showNowD( uint24_t d ) {
 
     uint8_t i=0;
 
@@ -275,19 +337,19 @@ inline void showNowH(  uint8_t h ) {
 }
 
 void initTestPins() {
-    
+
     // These appear on ISP pins 3 & 4 respectively
-    
+
     PORTC.PIN2CTRL = PORT_OPC_PULLUP_gc ;
-    PORTC.PIN3CTRL = PORT_OPC_PULLUP_gc ;   
-}    
+    PORTC.PIN3CTRL = PORT_OPC_PULLUP_gc ;
+}
 
 
 inline uint8_t testPin3Grounded() {
- 
+
     return ( ! (PORTC.IN & _BV(2) ));
-    
-}     
+
+}
 
 void triggerPinDisable() {
 
@@ -329,7 +391,7 @@ void run() {
 
             for( uint8_t m=0; m<60; m++ ) {
 
-                showNowM(m);                
+                showNowM(m);
 
                 for( uint8_t s=0; s<60; s++ ) {
 
@@ -339,19 +401,34 @@ void run() {
 
                         sleep_cpu();
 
-                    }                     
+                    }
                 }       // s
-            }           // m 
+            }           // m
         }               // h
     }                   // d
 }
 
 
 
-void FlashFetInit1(void) {
-    PORTD.DIR |= _BV(1);
+void FlashFetInit0(void) {
+    PORTD.DIR |= _BV(0);
     // No will be driving low, which keeps the flash lamp off
 }
+
+
+void FlashFetInit1(void) {
+    PORTD.DIR |= _BV(1);    
+    // No will be driving low, which keeps the flash lamp off
+}
+
+void FlashFetOn0() {
+    PORTD.OUTSET |= _BV(0);
+}
+
+void FlashFetOff0() {
+    PORTD.OUTCLR |= _BV(0);
+}
+
 
 void FlashFetOn1() {
     PORTD.OUTSET |= _BV(1);
@@ -359,33 +436,6 @@ void FlashFetOn1() {
 
 void FlashFetOff1() {
     PORTD.OUTCLR |= _BV(1);
-}
-
-void FlashFetInit2(void) {
-    PORTD.DIR |= _BV(0);
-    // No will be driving low, which keeps the flash lamp off
-}
-
-void FlashFetOn2() {
-    PORTD.OUTSET |= _BV(0);
-}
-
-void FlashFetOff2() {
-    PORTD.OUTCLR |= _BV(0);
-}
-
-
-void FlashFetInit3(void) {
-    PORTC.DIR |= _BV(6);
-    // No will be driving low, which keeps the flash lamp off
-}
-
-void FlashFetOn3() {
-    PORTC.OUTSET |= _BV(6);
-}
-
-void FlashFetOff3() {
-    PORTC.OUTCLR |= _BV(6);
 }
 
 
@@ -406,6 +456,53 @@ void inline verticalRetrace() {
 
 */
 
+
+void toggleP57() {
+
+   // Toggle test to check clock speed
+   PORTB.PIN0CTRL = PORT_OPC_TOTEM_gc;
+   PORTB.DIR |= PIN0_bm;
+   while (1) {
+       PORTB.OUTSET = PIN0_bm;
+       PORTB.OUTCLR = PIN0_bm;
+   }
+
+}
+
+void initFlash() {
+
+    FlashFetInit0();
+    FlashFetInit1();    
+    
+}    
+
+void flash() {
+    // Flash
+
+    FlashFetOn0();
+    _delay_ms(20);
+    FlashFetOff0();
+
+    FlashFetOn1();
+    _delay_ms(20);
+    FlashFetOff1();
+
+
+    // and fade...
+
+    for( uint8_t b=100; b>0; b-=2) {
+
+        FlashFetOn1();
+
+        for( uint8_t d=b; d; d-- ) _delay_us(10);
+        FlashFetOff1();
+        for( uint8_t d=100-b; d; d-- ) _delay_us(10);
+
+    }
+
+
+}
+
 /////////////////////////////////////////////////////////////////////
 // The main function follows a work flow that has been standardized
 // within the ASF for Xmega devices. This means that when searching
@@ -424,27 +521,23 @@ void inline verticalRetrace() {
 int main(void)
 {
 
-    disableUnusedIOPins();
-    
-    initTestPins();         // Set pullups on the 2 extra pins on the ISP
 
-    // Configure System and Peripheral Clocks
-    //sysclk_init();
+    // Enable the ultra low power RTC clock
+    // We will drive the LCD from this
+    enable_rtc_ulp();
 
-    FlashFetInit1();
-    FlashFetInit2();
-    FlashFetInit3();
+    disableUnusedIOPins();      // Save a little power
+
+    twi_init();
+
+    initTestPins();             // Set pullups on the 2 extra pins on the ISP
 
     // Disable unused peripherals to save power
     prr_init();
     disableJTAG();
 
-    // Enable the ultra low power RTC clock
-    // We will drive the LCD from this
-	enable_rtc();
 	// Configure Interrupt Priority Level and Location of Vectors
 	pmic_init();
-
 
 	// Initialize the LCD Controller
 	lcd_init();
@@ -467,25 +560,110 @@ int main(void)
 	PORTCFG.MPCMASK = 0xFF;
 */
 
-	//set_sleep_mode( SLEEP_SMODE_IDLE_gc);
-	set_sleep_mode( SLEEP_SMODE_PSAVE_gc );
+	set_sleep_mode( SLEEP_SMODE_PSAVE_gc );     // Lowest power sleep with LCD
 
 	sleep_enable();
+    
+    initFlash();
+    //flash();
 
     //lcd_set_pixel( 0 , 3);
     //lcd_set_pixel( 2 , 3);
 
-    //while (1);
+    /*
 
+    // Power test pattern
+    clearLCD();
+    showNowD( 123456 );
+    showNowH( 99 );
+    showNowM( 88 );
+    showNowS (77 );
+    char contrast =0;
+    while (1) {
+          contrast+=32;
+
+        lcd_set_contrast( contrast );
+        showNowD( 127+ contrast );
+
+        _delay_ms(500);
+
+
+    }
+    
+    */
 
     // NOW WE WAIT FOR TRIGGER PIN TO BE PRESSED
 
-    triggerPinInit();
+    triggerPinInit();       
 
+
+    
     uint8_t s=0;
+/*
+    while  (1) {
 
-    //lcd_2hz();
+        for( uint8_t d=0;d<10;d++) {
+            clearLCD();
 
+            figure8On( d , s );
+            digitShow( 6 ,  8 );
+            digitShow( 7 ,  d );
+
+            //digitShow( d , s % 10   );
+            sleep_cpu();
+
+        }
+
+        s++;
+
+        sleep_cpu();
+
+
+    }
+
+    */
+    
+
+
+    //lcd_1hz();          // Generate interrupt once per second
+
+    uint8_t n=9;
+    uint8_t d=11;
+
+    // Show a marching countdown pattern until pin released...
+    
+    do {
+
+        clearLCD();
+        digitShow( d , n );
+
+        sleep_cpu();        // We will wake on next second, or when switch changes state
+
+        if (n==0) {
+            n=9;
+            } else {
+            n--;
+        }
+
+        if (d==0) {
+            d=11;
+            } else {
+            d--;
+        }
+
+    } while ( !triggerPinPressed() );     // Repeat until pin released
+
+    clearLCD();
+    
+    _delay_ms(100);     // Debounce switch
+
+
+    // PRESSED - ARMED AND READY!
+
+    // Show figure 8 pattern until pin pulled
+
+    // TODO: unroll this for efficiency
+    
     do {
         clearLCD();
         for( uint8_t d=0;d<12;d+=2) {
@@ -502,72 +680,14 @@ int main(void)
             s=0;
         }
 
-    } while ( !triggerPinPressed() );     // Repeat until pin pressed
+    } while ( triggerPinPressed() );     // Repeat until pin pressed
 
-    // PRESSED - ARMED AND READY!
-
-    clearLCD();
-
-    _delay_ms(100);     // Debounce switch
-
-    //lcd_1hz();          // Generate interrupt once per second
-
-    uint8_t n=9;
-    uint8_t d=11;
-
-    // Show a marching countdown pattern until pin released...
-
-    do {
-
-        clearLCD();
-        digitShow( d , n );
-
-        sleep_cpu();        // We will wake on next second, or when switch changes state
-
-        if (n==0) {
-            n=9;
-        } else {
-            n--;
-        }
-
-        if (d==0) {
-            d=11;
-        } else {
-            d--;
-        }
-
-    } while ( triggerPinPressed() );     // Repeat until pin released
 
     clearLCD();
-
+    
     triggerPinDisable();           // So we do not waste current running though pull up and the switch forevermore....
 
-    // Flash
-
-    FlashFetOn1();
-    _delay_ms(20);
-    FlashFetOff1();
-
-    FlashFetOn2();
-    _delay_ms(20);
-    FlashFetOff2();
-
-    FlashFetOn3();
-    _delay_ms(20);
-    FlashFetOff3();
-
-    // and fade...
-
-    for( uint8_t b=100; b>0; b-=2) {
-
-        FlashFetOn1();
-
-        for( uint8_t d=b; d; d-- ) _delay_us(10);
-        FlashFetOff1();
-        for( uint8_t d=100-b; d; d-- ) _delay_us(10);
-
-    }
-
+    flash();
 
     // Clear out whatever was left from the countdown so we can assume all
     // all blank digits in run()
