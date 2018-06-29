@@ -280,8 +280,10 @@ inline void showNowD( uint24_t d ) {
     uint8_t i=0;
 
     while ( d > 0 && i < 6 ) {      // Don't show leading zeros. No need to wipe because digits only go up.
+        
+        // TODO: unrool this so we only uses as many bits as nessisary
 
-        uint16_t next = d / 10;
+        uint24_t next = d / 10;
 
         uint8_t ones = d-(next*10);
 
@@ -570,9 +572,10 @@ int main(void)
     //lcd_set_pixel( 0 , 3);
     //lcd_set_pixel( 2 , 3);
 
-    /*
+    
 
-    // Power test pattern
+    /*
+    // Contrast test pattern
     clearLCD();
     showNowD( 123456 );
     showNowH( 99 );
@@ -585,18 +588,16 @@ int main(void)
         lcd_set_contrast( contrast );
         showNowD( 127+ contrast );
 
-        _delay_ms(500);
+        sleep_cpu();
 
 
     }
     
-    */
-
+    
+*/
     // NOW WE WAIT FOR TRIGGER PIN TO BE PRESSED
 
     triggerPinInit();       
-
-
     
     uint8_t s=0;
 /*
@@ -657,7 +658,6 @@ int main(void)
     
     _delay_ms(100);     // Debounce switch
 
-
     // PRESSED - ARMED AND READY!
 
     // Show figure 8 pattern until pin pulled
@@ -672,7 +672,6 @@ int main(void)
         }
 
         sleep_cpu();
-
 
         s++;
 
@@ -691,6 +690,13 @@ int main(void)
 
     // Clear out whatever was left from the countdown so we can assume all
     // all blank digits in run()
+    
+    
+    for(int i=0; i<1000;i++) {
+        
+        showNowD(i);
+        sleep_cpu();
+    }        
 
     run();
 
