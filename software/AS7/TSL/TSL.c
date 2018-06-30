@@ -12,7 +12,11 @@
 
 #include "lcd.h"
 
+#include "USI_TWI_Master.h"
+
 #define F_CPU 2000000		// Default internal RC clock on startup
+
+#define RX8900_TWI_ADDRESS 0b0110010        // RX8900 8.9.5 (datasheet page 29) 
 
 #include <util/delay.h>
 
@@ -212,18 +216,6 @@ void prr_init() {
     PR.PRPB = PR_ADC_bm | PR_AC_bm;
     PR.PRPC = PR_TWI_bm | PR_USART0_bm | PR_SPI_bm | PR_HIRES_bm | PR_TC1_bm | PR_TC0_bm;
     PR.PRPE = PR_TWI_bm | PR_USART0_bm | PR_SPI_bm | PR_HIRES_bm | PR_TC1_bm | PR_TC0_bm;
-
-}
-
-void twi_init() {
-
-    // Enable pull-ups so we don't need extra resistors
-
-    PORTC.PIN0CTRL = PORT_OPC_PULLUP_gc;
-    PORTC.OUT |= _BV(0);
-
-    PORTC.PIN1CTRL = PORT_OPC_PULLUP_gc;
-    PORTC.OUT |= _BV(1);
 
 }
 
@@ -529,8 +521,8 @@ int main(void)
     enable_rtc_ulp();
 
     disableUnusedIOPins();      // Save a little power
-
-    twi_init();
+    
+    USI_TWI_Master_Initialise();        // Init TWO pins to pullup. Keep them from floating to save power. 
 
     initTestPins();             // Set pullups on the 2 extra pins on the ISP
 
@@ -692,10 +684,63 @@ int main(void)
     // all blank digits in run()
     
     
-    for(int i=0; i<1000;i++) {
+    for(int i=0; i<=3;i++) {
         
         showNowD(i);
         sleep_cpu();
+    }        
+    
+    
+    // TWI TEST CODE
+    
+
+        
+    clearLCD();
+                
+                
+    uint8_t reg[16];
+        
+    clearLCD();
+        
+    reg[0] = 0x00;        // Dummy write to 0x0c
+                        
+
+    
+    while (1) {
+        
+        clearLCD();
+        
+        while (1) {
+            
+            reg[1] = 0b00000101;        // Switch FOUT to 1024hz            
+        
+            USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00c , reg , 2 );
+            
+            sleep_cpu();
+            
+            USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0x0c , reg , 2 );
+            
+            showNowD( reg[1] );
+            
+            sleep_cpu();
+            
+            
+            reg[1] = 0b00000001;        // Switch FOUT to 1024hz            
+            
+            USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00c , reg , 2 );
+            
+            sleep_cpu();
+                        
+            
+        }            
+
+                               
+        USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0x0d , reg , 1 );
+        
+        showNowD( reg[0] );
+        
+        sleep_cpu();
+                
     }        
 
     run();
