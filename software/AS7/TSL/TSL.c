@@ -16,7 +16,7 @@
 
 #define F_CPU 2000000		// Default internal RC clock on startup
 
-#define RX8900_TWI_ADDRESS 0b0110010        // RX8900 8.9.5 (datasheet page 29) 
+#define RX8900_TWI_ADDRESS 0b0110010        // RX8900 8.9.5 (datasheet page 29)
 
 #include <util/delay.h>
 
@@ -66,7 +66,7 @@ void enable_rtc_ulp() {
     //////////////////////////////////////////////////////////////////////
 }
 
-void enable_rtc_TOSC1() {
+void enable_rtc_TOSC1_32K() {
 
     //////////////////////////////////////////////////////////////////////
     //CLK.RTCCTRL
@@ -129,11 +129,25 @@ void lcd_init(void) {
 	// 1/4 Duty, 1/3 Bias, COM[0:3] used
 //	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //0xB8 -0 No Low Power, prescale 0 so 125Hz frame rate
 //	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //0xB8 -0 No Low Power
-	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV2_bm |LCD_CLKDIV1_bm | LCD_CLKDIV0_bm | LCD_LPWAV_bm; //0xB8   2.65uA
 //	LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV2_bm |LCD_CLKDIV1_bm | LCD_CLKDIV0_bm ; //No Low power waveform         3.7uA
 
-    // PRESC divides the 32khz clock /16 into the LCD
-    // Clockdiv 111 further divides it down to 32Hz refresh
+
+
+    LCD.CTRLB = LCD_PRESC_bm | LCD_CLKDIV2_bm |LCD_CLKDIV1_bm | LCD_CLKDIV0_bm | LCD_LPWAV_bm; //0xB8   2.65uA
+    // WORKS BEST FOR 32KHZ clock (ulp or xtal)
+    // PRESC divides the 32khz clock /16 into the LCD to 2khz
+    // Clockdiv 111 further /8 to 2KHz down to 256Hz
+    // We are running 1/4 duty, so actual frame rate is /8 of 256Hz to 32Hz.
+    // This give a slight flicker, but ok.
+
+
+    // LCD.CTRLB = LCD_LPWAV_bm; //0xB8   ?uA
+    // PREC = 0 means div 8, gets us to 1024/8= 128Hrz
+    // CLKDIV = 0 means div 1, so stay at 128Hrz
+    // Ends up with LCD clock=1/8 TOSC
+    // TESTING 1KHz TOSC LCD clock. Uses more power!
+
+
 
 	//////////////////////////////////////////////////////////////////////
 
@@ -159,7 +173,9 @@ void lcd_init(void) {
 	// LP Waveform:			Int Period = (XIME[4:0] + 1) * 2
 	//LCD.INTCTRL = LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 16 frames with high priority
 
-    LCD.INTCTRL =  LCD_XIME3_bm | LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 32 frames with high priority (1 Hz)
+    //LCD.INTCTRL =  LCD_XIME3_bm | LCD_XIME2_bm | LCD_XIME1_bm | LCD_XIME0_bm | LCD_FCINTLVL_gm; // 0x3B sets interrupt period to 32 frames with high priority (1 Hz)
+
+    // NO LCD INTERRUPT. We will update display based on FOE from RX8900 RTC.
 
     // For low power waveforms requiring 2 subsequent frames, the FCIF flag is generated every
     // 2 x ( XIME[4:0] + 1 ) frames. The range is 2 up to 64 frames
@@ -272,7 +288,7 @@ inline void showNowD( uint24_t d ) {
     uint8_t i=0;
 
     while ( d > 0 && i < 6 ) {      // Don't show leading zeros. No need to wipe because digits only go up.
-        
+
         // TODO: unrool this so we only uses as many bits as nessisary
 
         uint24_t next = d / 10;
@@ -352,14 +368,29 @@ void triggerPinDisable() {
 
 }
 
+void FOE1HzPinEnable() {
+    PORTB.PIN2CTRL = PORT_ISC_RISING_gc  ;        // Only interrupt once per second on the rising edge of the 1Hz FOE signal from the RTC
+
+    PORTB.INTCTRL = PORT_INT0LVL0_bm;            // PORTB int0 is low level
+    PORTB_INT0MASK |= PIN2_bm;                   // Enable pin 7 to be int0
+}
+
+EMPTY_INTERRUPT(PORTB_INT0_vect);       // Trigger pin ISR. We don't care about ISR, just want to have the interrupt to wake us up.
+
+
+// Enable an interrupt from the RX8900 RTC chip
+// We program it to output a 1Hz square wave on the FOE pin
+// which is connected to PORTB.7. We will only generate an interrupt
+// on the rising edge, otherwise we'd get woken twice per sec.
+// The ISR is emptry - we just use the INT to wake from sleep.
 
 void triggerPinEnable() {
     PORTC.PIN7CTRL = PORT_OPC_PULLUP_gc | PORT_ISC_BOTHEDGES_gc ;        // Enable pull-up on trigger pin
-
     _delay_ms(1);          // Give the pullup a moment to do its thing
     PORTC.INTCTRL = PORT_INT0LVL0_bm;
     PORTC_INT0MASK |= PIN7_bm;
 }
+
 
 void triggerPinInit() {
     triggerPinEnable();
@@ -411,7 +442,7 @@ void FlashFetInit0(void) {
 
 
 void FlashFetInit1(void) {
-    PORTD.DIR |= _BV(1);    
+    PORTD.DIR |= _BV(1);
     // No will be driving low, which keeps the flash lamp off
 }
 
@@ -466,9 +497,9 @@ void toggleP57() {
 void initFlash() {
 
     FlashFetInit0();
-    FlashFetInit1();    
-    
-}    
+    FlashFetInit1();
+
+}
 
 void flash() {
     // Flash
@@ -497,6 +528,80 @@ void flash() {
 
 }
 
+// Set FOUT on the RX8900 to 1Khz (default 32Khz)
+
+#define RX8900_EXTENTION_REG 0x0d
+
+void rx8900_fout_1KHz(void) {
+
+    uint8_t reg = 0b00000100;
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_EXTENTION_REG , &reg , 1 );
+
+}
+
+// Set FOUT on the RX8900 to 1Hz (default 32Khz)
+
+void rx8900_fout_1Hz(void) {
+
+    uint8_t reg = 0b00001000;
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_EXTENTION_REG , &reg , 1 );
+
+}
+
+
+uint8_t bcd2c( uint8_t bcd ) {
+
+    uint8_t tens = bcd/16;
+    uint8_t ones = bcd - (tens*16);
+
+    return (tens*10) + ones;
+}
+
+uint8_t c2bcd( uint8_t c ) {
+
+    uint8_t tens = c/10;
+    uint8_t ones = c - (tens*10);
+
+    return (tens*16) + ones;
+
+}
+
+// Time in HHMMSS format
+// 123,456
+
+void rx8900_setTime(uint24_t t) {
+
+    uint8_t h = t/10000;
+
+    t-= h*10000;
+
+    uint8_t m = t/100;
+
+    t-= t*100;
+
+    uint8_t s= t;
+
+    uint8_t reg[3];
+
+    reg[0] = s;
+    reg[1] = m;
+    reg[2] = h;
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0 , reg , 3 );
+
+}
+
+uint24_t rx8900_getTime() {
+
+   uint8_t reg[3];
+
+   USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0 , reg , 3 );
+
+   return ( bcd2c( reg[0] ) + ( bcd2c( reg[1] ) * 100 ) + ( bcd2c( reg[2] ) * 10000UL) );
+
+}
+
+
 /////////////////////////////////////////////////////////////////////
 // The main function follows a work flow that has been standardized
 // within the ASF for Xmega devices. This means that when searching
@@ -518,11 +623,17 @@ int main(void)
 
     // Enable the ultra low power RTC clock
     // We will drive the LCD from this
-    enable_rtc_ulp();
+    //enable_rtc_ulp();
+
+    enable_rtc_xtal();
+
+    // TODO: Run system clock off XTAL also?
+
+    //enable_rtc_TOSC1_32K();
 
     disableUnusedIOPins();      // Save a little power
-    
-    USI_TWI_Master_Initialise();        // Init TWO pins to pullup. Keep them from floating to save power. 
+
+    USI_TWI_Master_Initialise();        // Init TWO pins to pullup. Keep them from floating to save power.
 
     initTestPins();             // Set pullups on the 2 extra pins on the ISP
 
@@ -531,12 +642,13 @@ int main(void)
     disableJTAG();
 
 	// Configure Interrupt Priority Level and Location of Vectors
-	pmic_init();
+	//pmic_init();
 
 	// Initialize the LCD Controller
 	lcd_init();
 
-	// Enable interrupts
+	// Enable interrupts on low level
+    CPU_CCP = CCP_IOREG_gc;             // TODO: I think this is not needed?
     PMIC.CTRL |= PMIC_LOLVLEN_bm;
 	sei();
 
@@ -557,14 +669,14 @@ int main(void)
 	set_sleep_mode( SLEEP_SMODE_PSAVE_gc );     // Lowest power sleep with LCD
 
 	sleep_enable();
-    
+
     initFlash();
     //flash();
 
     //lcd_set_pixel( 0 , 3);
     //lcd_set_pixel( 2 , 3);
 
-    
+
 
     /*
     // Contrast test pattern
@@ -584,13 +696,13 @@ int main(void)
 
 
     }
-    
-    
+
+
 */
     // NOW WE WAIT FOR TRIGGER PIN TO BE PRESSED
 
-    triggerPinInit();       
-    
+    triggerPinInit();
+
     uint8_t s=0;
 /*
     while  (1) {
@@ -615,7 +727,45 @@ int main(void)
     }
 
     */
-    
+
+    // POWER TEST CODE
+    // Meant to simulate a normal count
+
+    //while (1);
+
+    rx8900_fout_1Hz();
+
+
+    FOE1HzPinEnable();
+
+
+    /*
+    while (1) {
+        if (PORTB.IN & PIN7_bm) {
+            displaydigit01O();
+            displaydigit01F();
+        } else {
+            displaydigit02O();
+            sleep_cpu();
+            displaydigit02F();
+        }
+
+        _delay_ms(500);
+    }
+    */
+
+    showNowD( 123456 );
+
+    int g=2;
+
+    while (1) {
+        sleep_cpu();
+        clearLCD();
+        showNowD( rx8900_getTime() );
+
+    }
+
+
 
 
     //lcd_1hz();          // Generate interrupt once per second
@@ -624,7 +774,7 @@ int main(void)
     uint8_t d=11;
 
     // Show a marching countdown pattern until pin released...
-    
+
     do {
 
         clearLCD();
@@ -647,7 +797,7 @@ int main(void)
     } while ( !triggerPinPressed() );     // Repeat until pin released
 
     clearLCD();
-    
+
     _delay_ms(100);     // Debounce switch
 
     // PRESSED - ARMED AND READY!
@@ -655,7 +805,7 @@ int main(void)
     // Show figure 8 pattern until pin pulled
 
     // TODO: unroll this for efficiency
-    
+
     do {
         clearLCD();
         for( uint8_t d=0;d<12;d+=2) {
@@ -675,73 +825,45 @@ int main(void)
 
 
     clearLCD();
-    
+
     triggerPinDisable();           // So we do not waste current running though pull up and the switch forevermore....
 
     flash();
 
     // Clear out whatever was left from the countdown so we can assume all
     // all blank digits in run()
-    
-    
+
+
     for(int i=0; i<=3;i++) {
-        
+
         showNowD(i);
         sleep_cpu();
-    }        
-    
-    
+    }
+
+
     // TWI TEST CODE
-    
 
-        
+
     clearLCD();
-                
-                
+
     uint8_t reg[16];
-        
+
     clearLCD();
-        
+
     reg[0] = 0x00;        // Dummy write to 0x0c
-                        
 
-    
     while (1) {
-        
-        clearLCD();
-        
-        while (1) {
-            
-            reg[1] = 0b00000101;        // Switch FOUT to 1024hz            
-        
-            USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00c , reg , 2 );
-            
-            sleep_cpu();
-            
-            USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0x0c , reg , 2 );
-            
-            showNowD( reg[1] );
-            
-            sleep_cpu();
-            
-            
-            reg[1] = 0b00000001;        // Switch FOUT to 1024hz            
-            
-            USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00c , reg , 2 );
-            
-            sleep_cpu();
-                        
-            
-        }            
 
-                               
-        USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0x0d , reg , 1 );
-        
+        clearLCD();
+
+        USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0x00 , reg , 1 );
+
         showNowD( reg[0] );
-        
+
         sleep_cpu();
-                
-    }        
+
+
+    }
 
     run();
 
@@ -890,4 +1012,5 @@ int main(void)
 // It would be nice to avoid this alltoether, but I do not think it is possible on AVR.
 
 EMPTY_INTERRUPT(LCD_INT_vect);
+
 

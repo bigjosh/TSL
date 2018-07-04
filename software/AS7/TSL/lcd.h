@@ -72,5 +72,9 @@ void figure8On( uint8_t d,  uint8_t s );
 
 void figure8Off( uint8_t d,  uint8_t s );
 
+void displaydigit01O();
+void displaydigit02O();
+void displaydigit01F();
+void displaydigit02F();
 
 #endif /* LCD_H_ */

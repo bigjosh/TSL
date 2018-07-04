@@ -399,3 +399,98 @@ void displaydigit( uint8_t d,  uint8_t n , uint8_t onFlag) {
         }
     }
 }
+
+
+
+
+void displaydigit01O() {
+    
+    uint8_t d =10;
+    uint8_t n =1;
+    uint8_t onFlag = 1;
+
+    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+
+    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
+
+        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
+
+            if (onFlag) {
+                lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+                } else {
+                lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+            }
+
+        }
+    }
+}
+
+
+void displaydigit01F() {
+    
+    uint8_t d =10;
+    uint8_t n =1;
+    uint8_t onFlag = 0;
+
+    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+
+    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
+
+        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
+
+            if (onFlag) {
+                lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+                } else {
+                lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+            }
+
+        }
+    }
+}
+
+
+void displaydigit02O() {
+    
+    uint8_t d =10;
+    uint8_t n =2;
+    uint8_t onFlag = 1;
+
+    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+
+    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
+
+        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
+
+            if (onFlag) {
+                lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+                } else {
+                lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+            }
+
+        }
+    }
+}
+
+
+void displaydigit02F() {
+    
+    uint8_t d =10;
+    uint8_t n =2;
+    uint8_t onFlag = 0;
+
+    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+
+    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
+
+        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
+
+            if (onFlag) {
+                lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+                } else {
+                lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+            }
+
+        }
+    }
+}
+
