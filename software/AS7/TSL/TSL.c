@@ -18,11 +18,21 @@
 
 #define RX8900_TWI_ADDRESS 0b0110010        // RX8900 8.9.5 (datasheet page 29)
 
+#define RX8900_FLAG_REG        0x0e
+#define RX8900_CONTROL_REG     0x0f
+#define RX8900_BACKUP_REG      0x18
+
+#define RX8900_BACKUP_VDETOFF_bm   (1<<3)      // Setting to 1 disables the low voltage detect
+#define RX8900_BACKUP_SWOFF_bm     (1<<4)      // Setting to 1 opens the MOS switch
+
+
 #include <util/delay.h>
 
 typedef __uint24  uint24_t;     // Make 24 bit type look normal
 
-void enable_rtc_xtal() {
+// Run RTC from internal 32KHz osc
+
+void enable_rtc_in32() {
 
 	//////////////////////////////////////////////////////////////////////
 	//CLK.RTCCTRL
@@ -44,6 +54,64 @@ void enable_rtc_xtal() {
 }
 
 
+// Run RTC from external 32KHz xtal
+
+void enable_rtc_32Kxtal() {
+
+    //////////////////////////////////////////////////////////////////////
+    //CLK.RTCCTRL
+    //     7       6       5       4       3       2       1       0
+    // |   -   |   -   |   -   |   -   |      RTCSRC[2:0]     |  RTCEN  |
+    //     0       0       0       0       0       0       0       0
+    // LCD Runs off the RTC
+
+    // Set low power mode on XTAL drive
+    //OSC.XOSCCTRL |= OSC_X32KLPM_bm;
+
+    // Enable RTC, source from 32kHz XTAL
+    CCP = CCP_IOREG_gc; //Trigger protection mechanism
+    CLK.RTCCTRL = CLK_RTCEN_bm | CLK_RTCSRC_TOSC32_gc;
+    // ~2.6uA
+
+
+    // By default "1kHz from 32kHz internal ULP oscillator, but The LCD will always use the non-prescaled 32kHz oscillator output as clock source"
+
+    //////////////////////////////////////////////////////////////////////
+}
+
+void switch2XtalSysClock() {
+
+
+//    CCP = CCP_IOREG_gc; //Trigger protection mechanism
+//    OSC.XOSCCTRL = OSC_XOSCSEL_32KHz_gc;       // Low power mode, 32KHZ XTAL
+
+    CCP = CCP_IOREG_gc; //Trigger protection mechanism
+    OSC.XOSCCTRL = OSC_X32KLPM_bm | OSC_XOSCSEL_32KHz_gc;       // Low power mode, 32KHZ XTAL
+
+    OSC.CTRL |= OSC_XOSCEN_bm;      // Enable ext osc for sys clock
+
+    while (! (OSC.STATUS & OSC_XOSCRDY_bm));       // Wait for osc to be ready
+
+    CCP = CCP_IOREG_gc; //Trigger protection mechanism
+    CLK.CTRL = CLK_SCLKSEL_XOSC_gc;             // Switch system clock to xternal osc
+
+
+    // Takes two cycles on old clock to complete the switch
+    //nop();
+    //nop();
+
+  // CCP = CCP_IOREG_gc; //Trigger protection mechanism
+  // OSC.CTRL &= ~OSC_RC2MEN_bm;             // Clear 2mhz enable now that we dont need it anymore
+
+}
+
+
+
+#define PIN4_INIT()     PORTC.DIRSET = _BV( 3 )
+#define PIN4_UP()       PORTC.OUTSET = _BV( 3 )
+#define PIN4_DOWN()     PORTC.OUTCLR = _BV( 3 )
+
+
 void enable_rtc_ulp() {
 
     //////////////////////////////////////////////////////////////////////
@@ -56,7 +124,6 @@ void enable_rtc_ulp() {
 
     // Enable RTC, source from 32kHz internal ULP osc
     CLK.RTCCTRL = CLK_RTCEN_bm; // 0x01
-
 
     // TODO: Try X32KLPM low power xtal drive in XOSCCTRL
 
@@ -75,7 +142,6 @@ void enable_rtc_TOSC1_32K() {
     //     0       0       0       0       0       0       0       0
     // LCD Runs off the RTC
 
-
     // Enable RTC from external clock on TOSC1
     CCP = CCP_IOREG_gc; //Trigger protection mechanism
     CLK.RTCCTRL = CLK_RTCEN_bm | CLK_RTCSRC_EXTCLK_gc;
@@ -84,6 +150,13 @@ void enable_rtc_TOSC1_32K() {
     // By default "1kHz from 32kHz internal ULP oscillator, but The LCD will always use the non-prescaled 32kHz oscillator output as clock source"
 
     //////////////////////////////////////////////////////////////////////
+}
+
+// Use external osc as system clock
+
+void sysclk2osc() {
+    CCP = CCP_IOREG_gc; //Trigger protection mechanism
+    CLK.CTRL = CLK_SCLKSEL_XOSC_gc;
 }
 
 
@@ -221,7 +294,7 @@ void prr_init() {
 
     // Disable everything but the LCD & RTC
 
-    // Disabling RTC does not noticably reduce power
+    // Disabling RTC does not noticeably reduce power
 
     PR.PRGEN = PR_USB_bm | PR_AES_bm | PR_EVSYS_bm | PR_DMA_bm | PR_RTC_bm;
 
@@ -287,9 +360,9 @@ inline void showNowD( uint24_t d ) {
 
     uint8_t i=0;
 
-    while ( d > 0 && i < 6 ) {      // Don't show leading zeros. No need to wipe because digits only go up.
+    while ( i < 6 ) {      // Don't show leading zeros. No need to wipe because digits only go up.
 
-        // TODO: unrool this so we only uses as many bits as nessisary
+        // TODO: unroll this so we only uses as many bits as nessisary
 
         uint24_t next = d / 10;
 
@@ -305,11 +378,58 @@ inline void showNowD( uint24_t d ) {
 
 }
 
+
+inline void showNowHMS( uint24_t d ) {
+
+    uint8_t i=0;
+
+    while ( i < 6 ) {      // Don't show leading zeros. No need to wipe because digits only go up.
+
+        // TODO: unroll this so we only uses as many bits as nessisary
+
+        uint24_t next = d / 10;
+
+        uint8_t ones = d-(next*10);
+
+        digitShow( i , ones );
+
+        i++;
+
+        d = next;
+
+    }
+
+}
+
+
+
+inline void showNowS10s( uint8_t t) {
+
+    // TODO: We need to write some code to write some code here.
+    // We need to figure out the minimum segment transition from second to second
+    // and emit the code to implement those transitions directly.
+
+
+    digitShow( 1 , t );
+
+}
+
+
+inline void showNowS1s( uint8_t o) {
+
+    // TODO: We need to write some code to write some code here.
+    // We need to figure out the minimum segment transition from second to second
+    // and emit the code to implement those transitions directly.
+    digitShow( 0 , o );
+
+}
+
+
 inline void showNowS( uint8_t s) {
 
     // TODO: We need to write some code to write some code here.
     // We need to figure out the minimum segment transition from second to second
-    // and emit the code to implement those transisions directly.
+    // and emit the code to implement those transitions directly.
 
 
     uint8_t t;
@@ -337,9 +457,7 @@ inline void showNowH(  uint8_t h ) {
     t = h/10;
     digitShow( 4 , h  - (t*10) );
 
-    if (t) {
-        digitShow( 5 , t );
-    }
+    digitShow( 5 , t );
 
     // We do not need to explicitly blank the tens digit since we
     // always clear it on day increment and it only monotonically increments.
@@ -368,21 +486,34 @@ void triggerPinDisable() {
 
 }
 
-void FOE1HzPinEnable() {
+// Enable the pin on the XMEGA that gets the FOUT signal from the RX8900 and generates an inetrrupt to wake us
+
+void FOUT_in_pin_enable() {
     PORTB.PIN2CTRL = PORT_ISC_RISING_gc  ;        // Only interrupt once per second on the rising edge of the 1Hz FOE signal from the RTC
 
     PORTB.INTCTRL = PORT_INT0LVL0_bm;            // PORTB int0 is low level
     PORTB_INT0MASK |= PIN2_bm;                   // Enable pin 7 to be int0
 }
 
-EMPTY_INTERRUPT(PORTB_INT0_vect);       // Trigger pin ISR. We don't care about ISR, just want to have the interrupt to wake us up.
 
+// Output a 1 on the pin connected to FOE
+// The idea here is that when Vcc power is dropped duirring a battery change,
+// The FOE signal will drop quickly and turn off the FOUT and make the RX8900
+// coast longer
+
+void output1onFOEpin() {
+    PORTB.DIRSET = _BV(7);
+    PORTB.OUTSET = _BV(7);
+}
+
+EMPTY_INTERRUPT(PORTB_INT0_vect);       // FOUT ISR. We don't care about ISR, just want to have the interrupt to wake us up.
+                                        // TODO: Can we save some cycles by messing with the interrupt controller? Maybe the pending interrupt priority pins?
 
 // Enable an interrupt from the RX8900 RTC chip
 // We program it to output a 1Hz square wave on the FOE pin
 // which is connected to PORTB.7. We will only generate an interrupt
 // on the rising edge, otherwise we'd get woken twice per sec.
-// The ISR is emptry - we just use the INT to wake from sleep.
+// The ISR is empty - we just use the INT to wake from sleep.
 
 void triggerPinEnable() {
     PORTC.PIN7CTRL = PORT_OPC_PULLUP_gc | PORT_ISC_BOTHEDGES_gc ;        // Enable pull-up on trigger pin
@@ -402,35 +533,54 @@ inline uint8_t triggerPinPressed() {
 
 EMPTY_INTERRUPT(PORTC_INT0_vect);       // Trigger pin ISR. We don't care about ISR, just want to have the interrupt to wake us up.
 
-void run() {
 
-    for( uint16_t d=0; d< UINT16_MAX; d++ ) {
+// Returns when we hit 999999 days = 2739.72329 years. 
+
+void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
+    
+    uint8_t st = s/10;          // seconds tens place
+    uint8_t so = s - (st*10);   // seconds ones place
+
+    while (d<1000000) {
 
         showNowD( d );
 
-        digitBlank( 5 );        // Clear the residual leading '2' from the hours-tens digit.
-
-        for( uint8_t h=0; h<24; h++ ) {
+        while (h<24) {
 
             showNowH(h);
 
-            for( uint8_t m=0; m<60; m++ ) {
+            while (m<60) {
 
                 showNowM(m);
 
-                for( uint8_t s=0; s<60; s++ ) {
+                while (st<6) {
 
-                    showNowS( s );
+                    showNowS10s( st );
 
-                    if (!testPin3Grounded()) {
+                    while (so<10) {
+
+                        showNowS1s( so );
 
                         sleep_cpu();
+                        
+                        so++;
 
                     }
+                    so=0; 
+                    st++;
                 }       // s
+                
+                st=0; 
+                m++;
             }           // m
+            
+            m=0; 
+            h++;
         }               // h
-    }                   // d
+        h=0;
+        d++;        
+    }                   // d    
+    
 }
 
 
@@ -512,19 +662,29 @@ void flash() {
     _delay_ms(20);
     FlashFetOff1();
 
+    FlashFetOn0();
+    _delay_ms(20);
+    FlashFetOff0();
+
+    FlashFetOn1();
+    _delay_ms(20);
+    FlashFetOff1();
+
 
     // and fade...
 
-    for( uint8_t b=100; b>0; b-=2) {
+    for( uint8_t b=30; b>0; b-=10) {
 
+        FlashFetOn0();
+        for( uint8_t d=b; d; d-- ) _delay_us(1000);
+        FlashFetOff0();
+        for( uint8_t d=100-b; d; d-- ) _delay_us(1000);
         FlashFetOn1();
-
-        for( uint8_t d=b; d; d-- ) _delay_us(10);
+        for( uint8_t d=b; d; d-- ) _delay_us(1000);
         FlashFetOff1();
-        for( uint8_t d=100-b; d; d-- ) _delay_us(10);
+        for( uint8_t d=100-b; d; d-- ) _delay_us(1000);
 
     }
-
 
 }
 
@@ -566,30 +726,40 @@ uint8_t c2bcd( uint8_t c ) {
 
 }
 
-// Time in HHMMSS format
-// 123,456
 
-void rx8900_setTime(uint24_t t) {
 
-    uint8_t h = t/10000;
+// Set time, not BCD
 
-    t-= h*10000;
-
-    uint8_t m = t/100;
-
-    t-= t*100;
-
-    uint8_t s= t;
+void rx8900_setTime(uint8_t h , uint8_t m, uint8_t s) {
 
     uint8_t reg[3];
 
-    reg[0] = s;
-    reg[1] = m;
-    reg[2] = h;
+    reg[0] = c2bcd( s );
+    reg[1] = c2bcd( m );
+    reg[2] = c2bcd( h );
 
     USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0 , reg , 3 );
 
 }
+
+
+// Date in numbers (not BCD)
+
+void rx8900_setDate( uint8_t y , uint8_t m , uint8_t d ) {
+
+    uint8_t reg[3];
+
+    reg[0] = c2bcd( d );
+    reg[1] = c2bcd( m );
+    reg[2] = c2bcd( y );
+    
+    // YMD in address 4,5,6 respectively - as BCD
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 4 , reg , 3 );
+
+}
+
+// Returns time as long number hhmmss
 
 uint24_t rx8900_getTime() {
 
@@ -601,6 +771,319 @@ uint24_t rx8900_getTime() {
 
 }
 
+uint24_t rx8900_getDate() {
+
+    uint8_t reg[3];
+
+    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 4 , reg , 3 );
+
+    return ( bcd2c( reg[0] ) + ( bcd2c( reg[1] ) * 100 ) + ( bcd2c( reg[2] ) * 10000UL) );
+
+}
+
+
+#define RX8900_FLAG_LV_BM (1<<1)       // The chip saw a low voltage so might have lost time/data
+#define RX8900_FLAG_NT_BM (1<<0)       // Volatge is too low for temp compensation
+
+// Check voltage state of RTC chip
+
+uint24_t rx8900_getFlags() {
+
+    uint8_t reg[1];
+
+    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , RX8900_FLAG_REG , reg , 1 );
+
+    return reg[0];
+
+}
+
+
+void rx8900_clearFlags() {
+
+    uint8_t reg=0x00;
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_FLAG_REG , &reg , 1 );
+
+}
+
+const uint8_t magicregs[] = {
+    'T' ,      // RAM
+    's' ,      // MIN Alarm
+    'L' ,      // HOUR Alarm
+    '3' ,      // DAY Alarm
+};
+
+void rx8900_set_magic() {
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x08 , magicregs , 4 );
+
+}
+
+uint8_t rx8900_check_magic() {
+
+    uint8_t regs[4];
+
+    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0x08 , regs, 4 );
+
+    return regs[0]==magicregs[0] && regs[1]==magicregs[1] && regs[2]==magicregs[2] && regs[3]==magicregs[3];
+
+}
+
+
+// Open the MOS switch between Vdd and Vbat
+
+void rx8900_open_MOS() {
+
+    uint8_t reg= RX8900_BACKUP_SWOFF_bm;
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_BACKUP_REG , &reg , 1 );
+
+}
+
+
+// Initialize all regs to sane values at startup
+// TODO: Keep overflow in TEMP reg so we can run for centuries?
+
+void rx8900_init_regs() {
+
+    uint8_t timeregs[] = {
+        0x00 ,      // SEC
+        0x00 ,      // MIN
+        0x00 ,      // HOUR
+        0x00 ,      // WEEK
+        0x00 ,      // DAY
+        0x00 ,      // MONTH        
+        0x00 ,      // YEAR
+        0x00 ,      // TEMP (we will use for overflow count)
+    };
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00 , timeregs , 6 );
+
+    rx8900_clearFlags();
+
+    // Note here we add the RESET flag. This will start the timer at the begining of the first second. 
+
+    uint8_t contrlreg = 0b01000001;     // 2s temp comp, no timers or interrupts or alarms, reset
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_CONTROL_REG, &contrlreg, 1 );
+
+    rx8900_open_MOS();      // Set backup reg
+
+    rx8900_fout_1Hz();      // Enable FOUT at 1Hz (sets extension reg)
+
+}
+
+/*
+
+void makeDaysSoFarTable(void) {
+   
+   int days_in_month[] = { 0 , 31 , 28 , 31 , 30 , 31 , 30 , 31 , 31 , 30 , 31 , 30 , 31 };
+   
+   int days=0;
+   
+   for( int m=0; m<12; m++ ) {
+       
+       days+=days_in_month[m];
+       
+       printf( "%d,", days );
+       
+   }
+   
+   printf("\r");   
+    
+} 
+
+*/   
+
+
+// If month is jan (1), then no days other than the days in this month. 
+// If month is mar (3), then there have been 59 days so far plus what every day of the month it is now.
+// First 00000 is just becuase month starts at 1
+// DOES NOT COUNT LEAP DAYS - these are computed seporately
+// This table of days per month came from the RX8900 datasheet page 9
+
+static const unsigned int daysSoFarByMonth[] = { 0,0,31,59,90,120,151,181,212,243,273,304,334 };   
+
+// Convert the y/m/d values from the RX8900 to a count of the number of days since 00/1/1
+// rx8900_date_to_days( 0 , 1, 1 ) = 0
+// rx8900_date_to_days( 0 , 1, 31) = 30
+// rx8900_date_to_days( 0 , 2, 1 ) = 31
+// rx8900_date_to_days( 1 , 1, 1 ) = 366 (00 is a leap year!)
+
+static inline uint24_t rx8900_date_to_days( uint8_t y , uint8_t m, uint8_t d ) {
+    
+    uint24_t dayCount=0;
+           
+    // Count days in years past (not counting leap years yet)
+               
+    dayCount += (uint24_t)y * 365;      // 365 days per year past in normal years
+
+
+    if (y) {   // Don't even look if year is 0 
+        
+        dayCount += 1;              // Add the extra leap day for year 00, which is past since y>0
+        
+        dayCount += ((y-1)/4);     // Every 4th year is a leap year, so pick up an extra day for each. -1 because we don't want to count this year yet.
+        
+    }       
+        
+    if ( (y%4) == 0) {  // Is this a leap year?
+            
+        if (m>2) {      // Past feb 29th this year?
+                
+            dayCount++;        // Count the extra leap day
+                
+        }
+            
+    }
+            
+    dayCount += daysSoFarByMonth[ m ];          // Days until the 1st day of this month
+    
+    dayCount += (d-1);                          // On the 1st of the month, there are no days yet so -1
+        
+    return dayCount;                                     
+    
+}    
+
+
+void digitPatternUntilPressed() {
+    // Show a marching countdown pattern until button pressed...
+    // TOOD: we will load UTC time during this step
+
+    uint8_t n=9;
+    uint8_t d=11;
+
+
+    do {
+
+        clearLCD();
+        digitShow( d , n );
+
+        sleep_cpu();        // We will wake on next second, or when switch changes state
+
+        if (n==0) {
+            n=9;
+            } else {
+            n--;
+        }
+
+        if (d==0) {
+            d=11;
+            } else {
+            d--;
+        }
+
+    } while ( !triggerPinPressed() );     // Repeat until pin pressed
+}
+
+
+
+void figure8PatternUntilReleased() {
+    // Show figure 8 pattern until pin pulled
+
+    // TODO: unroll this for efficiency
+
+    uint8_t s=0;
+
+    do {
+        clearLCD();
+        for( uint8_t d=0;d<12;d+=2) {
+            figure8On( d , s );
+            figure8On( d+1 , (s+6)%8 );
+        }
+
+        sleep_cpu();
+
+        s++;
+
+        if (s==8) {
+            s=0;
+        }
+
+    } while ( triggerPinPressed() );     // Repeat until pin pressed
+
+}
+
+
+
+// Read out the current time from the RX8900 registers and save it to XMEGA EEPROM
+
+void saveCurrentTimeFromRX8900ToEEPROM() {
+    // TODO: This
+    
+}    
+
+// Check if RX8900 considers 00 as a leap year
+
+void leaptester() {
+    
+    
+    rx8900_init_regs();
+    
+    rx8900_setDate( 0  , 2 , 28 );
+    
+    rx8900_setTime( 23 , 59 , 50 );
+    
+    
+    while (1) {
+        
+        showNowD( rx8900_getDate() );
+        showNowHMS( rx8900_getTime() );
+        
+        sleep_cpu();
+        
+        
+    }        
+    
+    
+}    
+
+
+void contrastTest() {
+    
+    // Contrast test pattern
+    clearLCD();
+    showNowD( 123456 );
+    showNowH( 99 );
+    showNowM( 88 );
+    showNowS (77 );
+    char contrast =0;
+    while (1) {
+          contrast+=32;
+
+        lcd_set_contrast( contrast );
+        showNowD( 127+ contrast );
+
+        sleep_cpu();
+
+
+    }
+
+}
+ 
+// Just a standardized run to measure power usage that should be close to real usage in run mode. 
+
+void powerTest() {
+
+    // LOW POWER TEST CODE
+    // Meant to simulate a normal count
+
+    PIN4_INIT();
+
+    triggerPinDisable();
+
+    while (1) {
+        PIN4_UP();
+        displaydigit02F();
+        displaydigit01O();
+        PIN4_DOWN();
+        sleep_cpu();
+        //_delay_ms(1000);
+        displaydigit01F();
+        displaydigit02O();
+        sleep_cpu();
+    }    
+    
+}    
 
 /////////////////////////////////////////////////////////////////////
 // The main function follows a work flow that has been standardized
@@ -625,380 +1108,145 @@ int main(void)
     // We will drive the LCD from this
     //enable_rtc_ulp();
 
-    enable_rtc_xtal();
+    enable_rtc_ulp();
 
-    // TODO: Run system clock off XTAL also?
+    //enable_rtc_32Kxtal();     // Saves 0.3uA over ULP. Worth the savings for the extra part?
 
-    //enable_rtc_TOSC1_32K();
+    //switchSysclk2Xtal();      // Massively not worth it!
+
+    // enable_rtc_TOSC1_32K();  // Also massively not worth it!
 
     disableUnusedIOPins();      // Save a little power
 
     USI_TWI_Master_Initialise();        // Init TWO pins to pullup. Keep them from floating to save power.
 
-    initTestPins();             // Set pullups on the 2 extra pins on the ISP
+    initTestPins();             // Set pullups on the 2 extra pins on the ISP just to keep them from floating. We can also uses these for diagnostics and programming.
 
     // Disable unused peripherals to save power
     prr_init();
     disableJTAG();
 
-	// Configure Interrupt Priority Level and Location of Vectors
-	//pmic_init();
-
 	// Initialize the LCD Controller
 	lcd_init();
 
-	// Enable interrupts on low level
+	// Enable LOW priority interrupts (we only use low)
     CPU_CCP = CCP_IOREG_gc;             // TODO: I think this is not needed?
     PMIC.CTRL |= PMIC_LOLVLEN_bm;
 	sei();
-
-/*
-	PORTCFG.MPCMASK = 0xFF;
-	PORTA.PIN0CTRL = (PORTA.PIN0CTRL & ~PORT_OPC_gm) | PORT_OPC_PULLUP_gc;
-	PORTCFG.MPCMASK = 0xFF;
-	//PORTB.PIN0CTRL = (PORTB.PIN0CTRL & ~PORT_OPC_gm) | PORT_OPC_PULLUP_gc;
-	PORTCFG.MPCMASK = 0xFF;
-	PORTC.PIN0CTRL = (PORTC.PIN0CTRL & ~PORT_OPC_gm) | PORT_OPC_PULLUP_gc;
-	PORTCFG.MPCMASK = 0xFF;
-	PORTD.PIN0CTRL = (PORTD.PIN0CTRL & ~PORT_OPC_gm) | PORT_OPC_PULLUP_gc;
-	PORTCFG.MPCMASK = 0xFF;
-	PORTE.PIN0CTRL = (PORTE.PIN0CTRL & ~PORT_OPC_gm) | PORT_OPC_PULLUP_gc;
-	PORTCFG.MPCMASK = 0xFF;
-*/
 
 	set_sleep_mode( SLEEP_SMODE_PSAVE_gc );     // Lowest power sleep with LCD
 
 	sleep_enable();
 
     initFlash();
-    //flash();
-
-    //lcd_set_pixel( 0 , 3);
-    //lcd_set_pixel( 2 , 3);
 
 
+    triggerPinInit();       // Enable pullup and interrupts on trigger pin
 
-    /*
-    // Contrast test pattern
-    clearLCD();
-    showNowD( 123456 );
-    showNowH( 99 );
-    showNowM( 88 );
-    showNowS (77 );
-    char contrast =0;
-    while (1) {
-          contrast+=32;
+    FOUT_in_pin_enable();
 
-        lcd_set_contrast( contrast );
-        showNowD( 127+ contrast );
+    output1onFOEpin();
 
-        sleep_cpu();
+/*
 
-
-    }
-
+    // Drop clock to 1mhz for fcc part 15 exemption
+    // This increases power ~0.2uA
+    CCP = CCP_IOREG_gc; //Trigger protection mechanism
+    CLK.PSCTRL = CLK_PSADIV0_bm;             // Switch system clock /2
 
 */
-    // NOW WE WAIT FOR TRIGGER PIN TO BE PRESSED
 
-    triggerPinInit();
+    while (0) {
+        // Output pattern on pin 4 to check sys clock freq
+        PIN4_INIT();
+        while (1) {
+            PIN4_UP();
+            PIN4_DOWN();
+        };
+    }
 
+
+    //powerTest();
+    
+
+    // First check if this is our first time waking up ever...
+
+    uint8_t flagreg = rx8900_getFlags();
+    
+    // Default to zero start count. We will update these from the RX8900 if this is a warm start. 
+    uint24_t d=0;
+    uint8_t h=0;
+    uint8_t m=0;
     uint8_t s=0;
-/*
-    while  (1) {
+    
+    // For now, you can hold the trigger pin down while inserting the battery to simulate a fresh power-up
 
-        for( uint8_t d=0;d<10;d++) {
-            clearLCD();
+    if ( triggerPinPressed() || flagreg & RX8900_FLAG_LV_BM) {
 
-            figure8On( d , s );
-            digitShow( 6 ,  8 );
-            digitShow( 7 ,  d );
+        // We are new to the world (or our batteries were out too long)
 
-            //digitShow( d , s % 10   );
-            sleep_cpu();
+        // For now we will just go into wait-for-trigger mode
+        // TODO: If we are just manufactured, then set local clock to UTC. Otherwise display a sad message telling people to return unit.
 
-        }
+        // For now, set time to 00:00:00 on power up
 
-        s++;
+        rx8900_init_regs();
 
-        sleep_cpu();
+        // Show "ready to load" counting pattern until trigger pin is pushed in
 
+        // Show a marching countdown pattern until pin pressed...
+        // TOOD: we will load UTC time during this step
+
+        digitPatternUntilPressed();
+
+        clearLCD();
+
+        _delay_ms(100);     // Debounce switch
+
+        // PRESSED - ARMED AND READY!
+
+        figure8PatternUntilReleased();
+        
+        // Ok! We are live now, people!
+        
+        // Save this moment so we do not forget it ever.
+        
+        saveCurrentTimeFromRX8900ToEEPROM();
+                
+        clearLCD();
+
+        flash();
+
+    } else {
+        
+        // TODO: Show something on warm start?
+        
+        // Read current time from RX8900. Since we started at 00:00:00 1/1/00, we can figure out what our current count is
+        // at least for the first 100 years....
+        
+        uint8_t reg[8];
+
+        USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0 , reg , 8 );      // Read ssmmhhwwddmmyycc from RX8900 (BCD values!)
+        
+        s = bcd2c( reg[0] );
+        m = bcd2c( reg[1] );
+        h = bcd2c( reg[2] );
+        // Skip weeks
+        uint8_t day  = bcd2c( reg[4] );
+        uint8_t mon  = bcd2c( reg[5] );
+        uint8_t year = bcd2c( reg[6] );
+        
+        d = rx8900_date_to_days( year , mon , day );        
+        
+        // TODO: Add centry count here (and update century count in year increment)
 
     }
 
-    */
-
-    // POWER TEST CODE
-    // Meant to simulate a normal count
-
-    //while (1);
-
-    rx8900_fout_1Hz();
-
-
-    FOE1HzPinEnable();
-
-
-    /*
-    while (1) {
-        if (PORTB.IN & PIN7_bm) {
-            displaydigit01O();
-            displaydigit01F();
-        } else {
-            displaydigit02O();
-            sleep_cpu();
-            displaydigit02F();
-        }
-
-        _delay_ms(500);
-    }
-    */
-
-    showNowD( 123456 );
-
-    int g=2;
-
-    while (1) {
-        sleep_cpu();
-        clearLCD();
-        showNowD( rx8900_getTime() );
-
-    }
-
-
-
-
-    //lcd_1hz();          // Generate interrupt once per second
-
-    uint8_t n=9;
-    uint8_t d=11;
-
-    // Show a marching countdown pattern until pin released...
-
-    do {
-
-        clearLCD();
-        digitShow( d , n );
-
-        sleep_cpu();        // We will wake on next second, or when switch changes state
-
-        if (n==0) {
-            n=9;
-            } else {
-            n--;
-        }
-
-        if (d==0) {
-            d=11;
-            } else {
-            d--;
-        }
-
-    } while ( !triggerPinPressed() );     // Repeat until pin released
-
-    clearLCD();
-
-    _delay_ms(100);     // Debounce switch
-
-    // PRESSED - ARMED AND READY!
-
-    // Show figure 8 pattern until pin pulled
-
-    // TODO: unroll this for efficiency
-
-    do {
-        clearLCD();
-        for( uint8_t d=0;d<12;d+=2) {
-            figure8On( d , s );
-            figure8On( d+1 , (s+6)%8 );
-        }
-
-        sleep_cpu();
-
-        s++;
-
-        if (s==8) {
-            s=0;
-        }
-
-    } while ( triggerPinPressed() );     // Repeat until pin pressed
-
-
-    clearLCD();
 
     triggerPinDisable();           // So we do not waste current running though pull up and the switch forevermore....
 
-    flash();
+    run( d , h , m , s );
 
-    // Clear out whatever was left from the countdown so we can assume all
-    // all blank digits in run()
-
-
-    for(int i=0; i<=3;i++) {
-
-        showNowD(i);
-        sleep_cpu();
-    }
-
-
-    // TWI TEST CODE
-
-
-    clearLCD();
-
-    uint8_t reg[16];
-
-    clearLCD();
-
-    reg[0] = 0x00;        // Dummy write to 0x0c
-
-    while (1) {
-
-        clearLCD();
-
-        USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0x00 , reg , 1 );
-
-        showNowD( reg[0] );
-
-        sleep_cpu();
-
-
-    }
-
-    run();
-
-   uint8_t count=0;
-
-    while(1) {
-
-        for( uint8_t slot=0; slot<12;slot++) {
-
-            digitOn( (11-slot) , ( slot  + count) % 10 );
-
-        }
-
-    while (1) {
-        sleep_cpu();
-        LCD.DATA0 = 0xff;
-        sleep_cpu();
-        LCD.DATA0 = 0x00;
-    }
-
-        for( uint8_t slot=0; slot<12;slot++) {
-
-            digitOff( (11-slot) , ( slot  + count) % 10 );
-
-        }
-        count++;
-    }
-
-
-
-
-    while (1) {
-
-        for(uint8_t i=0; i<12; i++ ) {
-
-
-            for( uint8_t slot=0; slot<12;slot++) {
-
-                digitOn( slot , 12-slot );
-
-            }
-
-            //while(1);
-
-            sleep_cpu();
-
-            for( uint8_t slot=0; slot<12;slot++) {
-
-                digitOff( slot , i );
-
-            }
-            sleep_cpu();
-        }
-
-    }
-
-
-
-	while (1) {
-
-		//PORTC.OUTTGL = 0xff;
-
-		// Clear the display memory
-		LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA0=0xff;
-
-		sleep_cpu();
-
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA1=0xff;
-
-		sleep_cpu();
-
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA2=0xff;
-
-		sleep_cpu();
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA3=0xff;
-
-		sleep_cpu();
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-
-		LCD.DATA4=0xff;
-
-		sleep_cpu();
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA5=0xff;
-
-		sleep_cpu();
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA6=0xff;
-
-
-		sleep_cpu();
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA7=0xff;
-
-		sleep_cpu();
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA8=0xff;
-
-
-		sleep_cpu();
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA9=0xff;
-
-		sleep_cpu();
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA10=0xff;
-
-		sleep_cpu();
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA11=0xff;
-
-		sleep_cpu();
-		//LCD.CTRLA |= LCD_CLRDT_bm; //0x04
-		LCD.DATA12=0xff;
-
-		sleep_cpu();
-		sleep_cpu();
-		sleep_cpu();
-		sleep_cpu();
-		sleep_cpu();
-
-
-		//PORTC.OUTTGL = 0xff;
-
-
-		//set_sleep_mode( SLEEP_SMODE_PDOWN_gc );
-		//sleep_cpu();
-
-		// Infinite Loop to add code and allow LCD
-		// Frame Interrupt to continuously operate
-	}
 }
 
 
