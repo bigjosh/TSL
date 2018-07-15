@@ -106,10 +106,17 @@ void switch2XtalSysClock() {
 }
 
 
+// Diagnostic use of the extra middle pins on the ISP
+//
+//   VCC  |   [TOP]  |    GND
+//   DTA  |   [BOT]  |    CLK
 
-#define PIN4_INIT()     PORTC.DIRSET = _BV( 3 )
-#define PIN4_UP()       PORTC.OUTSET = _BV( 3 )
-#define PIN4_DOWN()     PORTC.OUTCLR = _BV( 3 )
+#define PINTOP_OUT()      (PORTC.DIRSET = _BV( 3 ))
+#define PINTOP_UP()       (PORTC.OUTSET = _BV( 3 ))
+#define PINTOP_DOWN()     (PORTC.OUTCLR = _BV( 3 ))
+
+#define PINTOP_IN()       (PORTC.PIN3CTRL = PORT_OPC_PULLUP_gc)  // As pull-up
+#define PINTOP_TEST()     (!(PORTC.IN & _BV( 3 )))              // Grounded?
 
 
 void enable_rtc_ulp() {
@@ -378,6 +385,46 @@ inline void showNowD( uint24_t d ) {
 
 }
 
+// Show a 6 digit number on the right LCD
+
+inline void showNowRight( uint24_t d ) {
+
+    uint8_t i=0;
+
+    while ( i < 6 ) {      // Don't show leading zeros. No need to wipe because digits only go up.
+
+        // TODO: unroll this so we only uses as many bits as nessisary
+
+        uint24_t next = d / 10;
+
+        uint8_t ones = d-(next*10);
+
+        digitShow( i , ones );
+
+        i++;
+
+        d = next;
+
+    }
+
+}
+
+
+inline void showNowYMD( uint8_t y , uint8_t m , uint8_t d ) {
+    
+    digitShow( 0 , d % 10);
+    digitShow( 1 , d / 10 );    
+
+    digitShow( 2 , m % 10);
+    digitShow( 3 , m / 10 );
+
+
+    digitShow( 4 , y % 10);
+    digitShow( 5 , y / 10 );
+
+
+}
+
 
 inline void showNowHMS( uint24_t d ) {
 
@@ -538,6 +585,10 @@ EMPTY_INTERRUPT(PORTC_INT0_vect);       // Trigger pin ISR. We don't care about 
 
 void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
+    // Enable pull-up on test pin for diagnostic time speed up for testing
+    // TODO: remove this diagnostic code
+    PINTOP_IN();
+
     uint8_t st = s/10;          // seconds tens place
     uint8_t so = s - (st*10);   // seconds ones place
 
@@ -561,9 +612,12 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
                         showNowS1s( so );
 
+                        // Short top right pins on ISP to speed up time for testing
+                        // TODO: Remove this diagnostic code
 
-                        if (
-                        sleep_cpu();
+                        if ( !PINTOP_TEST() ) {
+                            sleep_cpu();
+                        }
 
                         so++;
 
@@ -585,6 +639,21 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
 }
 
+// Pattern to show when we run out of digits in 2300 years...
+
+void showGoodbye() {
+
+    while (1) {
+
+        showNowD( 999999 );
+        showNowRight( 0 );
+        sleep_cpu();
+        showNowD( 0 );
+        showNowRight( 999999 );
+        sleep_cpu();
+    }        
+
+}
 
 
 void FlashFetInit0(void) {
@@ -653,6 +722,8 @@ void initFlash() {
 
 }
 
+//Note that flash should take significantly less than 1 sec so we don't miss a tick
+
 void flash() {
     // Flash
 
@@ -678,13 +749,13 @@ void flash() {
     for( uint8_t b=30; b>0; b-=10) {
 
         FlashFetOn0();
-        for( uint8_t d=b; d; d-- ) _delay_us(1000);
+        for( uint8_t d=b; d; d-- ) _delay_us(500);
         FlashFetOff0();
-        for( uint8_t d=100-b; d; d-- ) _delay_us(1000);
+        for( uint8_t d=100-b; d; d-- ) _delay_us(500);
         FlashFetOn1();
-        for( uint8_t d=b; d; d-- ) _delay_us(1000);
+        for( uint8_t d=b; d; d-- ) _delay_us(500);
         FlashFetOff1();
-        for( uint8_t d=100-b; d; d-- ) _delay_us(1000);
+        for( uint8_t d=100-b; d; d-- ) _delay_us(500);
 
     }
 
@@ -848,20 +919,6 @@ void rx8900_open_MOS() {
 
 void rx8900_init_regs() {
 
-    uint8_t timeregs[] = {
-        0x00 ,      // SEC
-        0x00 ,      // MIN
-        0x00 ,      // HOUR
-        0x00 ,      // WEEK
-        0x00 ,      // DAY
-        0x00 ,      // MONTH
-        0x00 ,      // YEAR
-        0x00 ,      // TEMP (we will use for overflow count)
-    };
-
-    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00 , timeregs , 6 );
-
-    rx8900_clearFlags();
 
     // Note here we add the RESET flag. This will start the timer at the begining of the first second.
 
@@ -871,6 +928,23 @@ void rx8900_init_regs() {
     rx8900_open_MOS();      // Set backup reg
 
     rx8900_fout_1Hz();      // Enable FOUT at 1Hz (sets extension reg)
+
+    rx8900_clearFlags();            // Clear all the flags, in case a tick had already happened. 
+                                    // Do this withing 1 sec of the RESET to avoid missing a tick.
+
+    uint8_t timeregs[] = {
+        c2bcd(  0 ),      // SEC
+        c2bcd(  0 ),      // MIN
+        c2bcd(  0 ),      // HOUR
+        c2bcd(  0 ),      // WEEK
+        c2bcd(  1 ) ,      // DAY
+        c2bcd(  1 ),      // MONTH
+        c2bcd(  0 ),      // YEAR
+        c2bcd(  0 ),      // TEMP (we will use for overflow count)
+    };
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00 , timeregs , 8 );
+
 
 }
 
@@ -1069,15 +1143,15 @@ void powerTest() {
     // LOW POWER TEST CODE
     // Meant to simulate a normal count
 
-    PIN4_INIT();
+    PINTOP_OUT();
 
     triggerPinDisable();
 
     while (1) {
-        PIN4_UP();
+        PINTOP_UP();
         displaydigit02F();
         displaydigit01O();
-        PIN4_DOWN();
+        PINTOP_DOWN();
         sleep_cpu();
         //_delay_ms(1000);
         displaydigit01F();
@@ -1142,7 +1216,6 @@ int main(void)
 
     initFlash();
 
-
     triggerPinInit();       // Enable pullup and interrupts on trigger pin
 
     FOUT_in_pin_enable();
@@ -1156,17 +1229,18 @@ int main(void)
     CCP = CCP_IOREG_gc; //Trigger protection mechanism
     CLK.PSCTRL = CLK_PSADIV0_bm;             // Switch system clock /2
 
-*/
+
 
     while (0) {
         // Output pattern on pin 4 to check sys clock freq
-        PIN4_INIT();
+        PINTOP_OUT();
         while (1) {
-            PIN4_UP();
-            PIN4_DOWN();
+            PINTOP_UP();
+            PINTOP_DOWN();
         };
     }
 
+*/
 
     //powerTest();
 
@@ -1190,9 +1264,6 @@ int main(void)
         // For now we will just go into wait-for-trigger mode
         // TODO: If we are just manufactured, then set local clock to UTC. Otherwise display a sad message telling people to return unit.
 
-        // For now, set time to 00:00:00 on power up
-
-        rx8900_init_regs();
 
         // Show "ready to load" counting pattern until trigger pin is pushed in
 
@@ -1210,44 +1281,55 @@ int main(void)
         figure8PatternUntilReleased();
 
         // Ok! We are live now, people!
+               
 
         // Save this moment so we do not forget it ever.
 
         saveCurrentTimeFromRX8900ToEEPROM();
+        
+        // start counter
 
-        clearLCD();
+        rx8900_init_regs();        
+        
+        
+        // Throw a 00000 000000 up on the screen while we flash so there is instant feedback that we started. 
+        showNowD( 0 );
+        showNowHMS( 0 );         
 
         flash();
 
-    } else {
+    } 
+    
+    
+    // Read (or reread if this was a cold start) current time from RX8900. Since we started at 00:00:00 1/1/00, we can figure out 
+    // what our current count is
+    // at least for the first 100 years....
+    
+    // While the reread is supurflous, I'm leaving it in so at least if there is a problem with the initial RTC time set
+    // then we will know about it now rather than in 80 years when the person goes to change the battery. 
 
-        // TODO: Show something on warm start?
+    uint8_t reg[8];
 
-        // Read current time from RX8900. Since we started at 00:00:00 1/1/00, we can figure out what our current count is
-        // at least for the first 100 years....
+    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0 , reg , 8 );      // Read ssmmhhwwddmmyycc from RX8900 (BCD values!)
+       
+    s = bcd2c( reg[0] );
+    m = bcd2c( reg[1] );
+    h = bcd2c( reg[2] );
+    // Skip weeks
+    uint8_t day  = bcd2c( reg[4] );
+    uint8_t mon  = bcd2c( reg[5] );
+    uint8_t year = bcd2c( reg[6] );
 
-        uint8_t reg[8];
+    d = rx8900_date_to_days( year , mon , day );
 
-        USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0 , reg , 8 );      // Read ssmmhhwwddmmyycc from RX8900 (BCD values!)
-
-        s = bcd2c( reg[0] );
-        m = bcd2c( reg[1] );
-        h = bcd2c( reg[2] );
-        // Skip weeks
-        uint8_t day  = bcd2c( reg[4] );
-        uint8_t mon  = bcd2c( reg[5] );
-        uint8_t year = bcd2c( reg[6] );
-
-        d = rx8900_date_to_days( year , mon , day );
-
-        // TODO: Add century count here (and update century count in year increment)
-
-    }
+    // TODO: Add century count here (and update century count in year increment)
 
 
     triggerPinDisable();           // So we do not waste current running though pull up and the switch forevermore....
 
     run( d , h , m , s );
+    
+    showGoodbye();
 
 }
 
@@ -1259,7 +1341,7 @@ int main(void)
 // occurs at a constant rate.
 
 // We leave it empty and just do all our processing when it returns.
-// It would be nice to avoid this alltoether, but I do not think it is possible on AVR.
+// It would be nice to avoid this altogethers, but I do not think it is possible on AVR.
 
 EMPTY_INTERRUPT(LCD_INT_vect);
 
