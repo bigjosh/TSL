@@ -1,6 +1,6 @@
 RefDes,Name,Value,Manufacturer,Place,Subsitution,Budget Price at 1K units,URL
 C1,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693
-C2,CAP_1210,CAP CER 100UF 10V X5R 1210,MurataSamsung,,Possible,0.43,https://www.digikey.com/product-detail/en/samsung-electro-mechanics/CL32A107MPVNNNE/1276-3364-1-ND/3891450
+C2,CAP_1210,CAP CER 100UF 10V X5R 1210,Samsung,,Possible,0.43,https://www.digikey.com/product-detail/en/samsung-electro-mechanics/CL32A107MPVNNNE/1276-3364-1-ND/3891450
 C3,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693
 C4,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693
 C5,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693
