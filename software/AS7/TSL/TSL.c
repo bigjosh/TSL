@@ -106,10 +106,17 @@ void switch2XtalSysClock() {
 }
 
 
+// Diagnostic use of the extra middle pins on the ISP
+//
+//   VCC  |   [TOP]  |    GND
+//   DTA  |   [BOT]  |    CLK
 
-#define PIN4_INIT()     PORTC.DIRSET = _BV( 3 )
-#define PIN4_UP()       PORTC.OUTSET = _BV( 3 )
-#define PIN4_DOWN()     PORTC.OUTCLR = _BV( 3 )
+#define PINTOP_OUT()      (PORTC.DIRSET = _BV( 3 ))
+#define PINTOP_UP()       (PORTC.OUTSET = _BV( 3 ))
+#define PINTOP_DOWN()     (PORTC.OUTCLR = _BV( 3 ))
+
+#define PINTOP_IN()       (PORTC.PIN3CTRL = PORT_OPC_PULLUP_gc)  // As pull-up
+#define PINTOP_TEST()     (!(PORTC.IN & _BV( 3 )))              // Grounded?
 
 
 void enable_rtc_ulp() {
@@ -378,6 +385,46 @@ inline void showNowD( uint24_t d ) {
 
 }
 
+// Show a 6 digit number on the right LCD
+
+inline void showNowRight( uint24_t d ) {
+
+    uint8_t i=0;
+
+    while ( i < 6 ) {      // Don't show leading zeros. No need to wipe because digits only go up.
+
+        // TODO: unroll this so we only uses as many bits as nessisary
+
+        uint24_t next = d / 10;
+
+        uint8_t ones = d-(next*10);
+
+        digitShow( i , ones );
+
+        i++;
+
+        d = next;
+
+    }
+
+}
+
+
+inline void showNowYMD( uint8_t y , uint8_t m , uint8_t d ) {
+    
+    digitShow( 0 , d % 10);
+    digitShow( 1 , d / 10 );    
+
+    digitShow( 2 , m % 10);
+    digitShow( 3 , m / 10 );
+
+
+    digitShow( 4 , y % 10);
+    digitShow( 5 , y / 10 );
+
+
+}
+
 
 inline void showNowHMS( uint24_t d ) {
 
@@ -534,10 +581,14 @@ inline uint8_t triggerPinPressed() {
 EMPTY_INTERRUPT(PORTC_INT0_vect);       // Trigger pin ISR. We don't care about ISR, just want to have the interrupt to wake us up.
 
 
-// Returns when we hit 999999 days = 2739.72329 years. 
+// Returns when we hit 999999 days = 2739.72329 years.
 
 void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
-    
+
+    // Enable pull-up on test pin for diagnostic time speed up for testing
+    // TODO: remove this diagnostic code
+    PINTOP_IN();
+
     uint8_t st = s/10;          // seconds tens place
     uint8_t so = s - (st*10);   // seconds ones place
 
@@ -561,28 +612,48 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
                         showNowS1s( so );
 
-                        sleep_cpu();
-                        
+                        // Short top right pins on ISP to speed up time for testing
+                        // TODO: Remove this diagnostic code
+
+                        if ( !PINTOP_TEST() ) {
+                            sleep_cpu();
+                        }
+
                         so++;
 
                     }
-                    so=0; 
+                    so=0;
                     st++;
                 }       // s
-                
-                st=0; 
+
+                st=0;
                 m++;
             }           // m
-            
-            m=0; 
+
+            m=0;
             h++;
         }               // h
         h=0;
-        d++;        
-    }                   // d    
-    
+        d++;
+    }                   // d
+
 }
 
+// Pattern to show when we run out of digits in 2300 years...
+
+void showGoodbye() {
+
+    while (1) {
+
+        showNowD( 999999 );
+        showNowRight( 0 );
+        sleep_cpu();
+        showNowD( 0 );
+        showNowRight( 999999 );
+        sleep_cpu();
+    }        
+
+}
 
 
 void FlashFetInit0(void) {
@@ -651,6 +722,8 @@ void initFlash() {
 
 }
 
+//Note that flash should take significantly less than 1 sec so we don't miss a tick
+
 void flash() {
     // Flash
 
@@ -676,13 +749,13 @@ void flash() {
     for( uint8_t b=30; b>0; b-=10) {
 
         FlashFetOn0();
-        for( uint8_t d=b; d; d-- ) _delay_us(1000);
+        for( uint8_t d=b; d; d-- ) _delay_us(500);
         FlashFetOff0();
-        for( uint8_t d=100-b; d; d-- ) _delay_us(1000);
+        for( uint8_t d=100-b; d; d-- ) _delay_us(500);
         FlashFetOn1();
-        for( uint8_t d=b; d; d-- ) _delay_us(1000);
+        for( uint8_t d=b; d; d-- ) _delay_us(500);
         FlashFetOff1();
-        for( uint8_t d=100-b; d; d-- ) _delay_us(1000);
+        for( uint8_t d=100-b; d; d-- ) _delay_us(500);
 
     }
 
@@ -752,7 +825,7 @@ void rx8900_setDate( uint8_t y , uint8_t m , uint8_t d ) {
     reg[0] = c2bcd( d );
     reg[1] = c2bcd( m );
     reg[2] = c2bcd( y );
-    
+
     // YMD in address 4,5,6 respectively - as BCD
 
     USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 4 , reg , 3 );
@@ -846,22 +919,8 @@ void rx8900_open_MOS() {
 
 void rx8900_init_regs() {
 
-    uint8_t timeregs[] = {
-        0x00 ,      // SEC
-        0x00 ,      // MIN
-        0x00 ,      // HOUR
-        0x00 ,      // WEEK
-        0x00 ,      // DAY
-        0x00 ,      // MONTH        
-        0x00 ,      // YEAR
-        0x00 ,      // TEMP (we will use for overflow count)
-    };
 
-    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00 , timeregs , 6 );
-
-    rx8900_clearFlags();
-
-    // Note here we add the RESET flag. This will start the timer at the begining of the first second. 
+    // Note here we add the RESET flag. This will start the timer at the begining of the first second.
 
     uint8_t contrlreg = 0b01000001;     // 2s temp comp, no timers or interrupts or alarms, reset
     USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_CONTROL_REG, &contrlreg, 1 );
@@ -870,38 +929,55 @@ void rx8900_init_regs() {
 
     rx8900_fout_1Hz();      // Enable FOUT at 1Hz (sets extension reg)
 
+    rx8900_clearFlags();            // Clear all the flags, in case a tick had already happened. 
+                                    // Do this withing 1 sec of the RESET to avoid missing a tick.
+
+    uint8_t timeregs[] = {
+        c2bcd(  0 ),      // SEC
+        c2bcd(  0 ),      // MIN
+        c2bcd(  0 ),      // HOUR
+        c2bcd(  0 ),      // WEEK
+        c2bcd(  1 ) ,      // DAY
+        c2bcd(  1 ),      // MONTH
+        c2bcd(  0 ),      // YEAR
+        c2bcd(  0 ),      // TEMP (we will use for overflow count)
+    };
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00 , timeregs , 8 );
+
+
 }
 
 /*
 
 void makeDaysSoFarTable(void) {
-   
+
    int days_in_month[] = { 0 , 31 , 28 , 31 , 30 , 31 , 30 , 31 , 31 , 30 , 31 , 30 , 31 };
-   
+
    int days=0;
-   
+
    for( int m=0; m<12; m++ ) {
-       
+
        days+=days_in_month[m];
-       
+
        printf( "%d,", days );
-       
+
    }
-   
-   printf("\r");   
-    
-} 
 
-*/   
+   printf("\r");
+
+}
+
+*/
 
 
-// If month is jan (1), then no days other than the days in this month. 
+// If month is jan (1), then no days other than the days in this month.
 // If month is mar (3), then there have been 59 days so far plus what every day of the month it is now.
 // First 00000 is just becuase month starts at 1
 // DOES NOT COUNT LEAP DAYS - these are computed seporately
 // This table of days per month came from the RX8900 datasheet page 9
 
-static const unsigned int daysSoFarByMonth[] = { 0,0,31,59,90,120,151,181,212,243,273,304,334 };   
+static const unsigned int daysSoFarByMonth[] = { 0,0,31,59,90,120,151,181,212,243,273,304,334 };
 
 // Convert the y/m/d values from the RX8900 to a count of the number of days since 00/1/1
 // rx8900_date_to_days( 0 , 1, 1 ) = 0
@@ -910,39 +986,39 @@ static const unsigned int daysSoFarByMonth[] = { 0,0,31,59,90,120,151,181,212,24
 // rx8900_date_to_days( 1 , 1, 1 ) = 366 (00 is a leap year!)
 
 static inline uint24_t rx8900_date_to_days( uint8_t y , uint8_t m, uint8_t d ) {
-    
+
     uint24_t dayCount=0;
-           
+
     // Count days in years past (not counting leap years yet)
-               
+
     dayCount += (uint24_t)y * 365;      // 365 days per year past in normal years
 
 
-    if (y) {   // Don't even look if year is 0 
-        
+    if (y) {   // Don't even look if year is 0
+
         dayCount += 1;              // Add the extra leap day for year 00, which is past since y>0
-        
+
         dayCount += ((y-1)/4);     // Every 4th year is a leap year, so pick up an extra day for each. -1 because we don't want to count this year yet.
-        
-    }       
-        
-    if ( (y%4) == 0) {  // Is this a leap year?
-            
-        if (m>2) {      // Past feb 29th this year?
-                
-            dayCount++;        // Count the extra leap day
-                
-        }
-            
+
     }
-            
+
+    if ( (y%4) == 0) {  // Is this a leap year?
+
+        if (m>2) {      // Past feb 29th this year?
+
+            dayCount++;        // Count the extra leap day
+
+        }
+
+    }
+
     dayCount += daysSoFarByMonth[ m ];          // Days until the 1st day of this month
-    
+
     dayCount += (d-1);                          // On the 1st of the month, there are no days yet so -1
-        
-    return dayCount;                                     
-    
-}    
+
+    return dayCount;
+
+}
 
 
 void digitPatternUntilPressed() {
@@ -1009,37 +1085,37 @@ void figure8PatternUntilReleased() {
 
 void saveCurrentTimeFromRX8900ToEEPROM() {
     // TODO: This
-    
-}    
+
+}
 
 // Check if RX8900 considers 00 as a leap year
 
 void leaptester() {
-    
-    
+
+
     rx8900_init_regs();
-    
+
     rx8900_setDate( 0  , 2 , 28 );
-    
+
     rx8900_setTime( 23 , 59 , 50 );
-    
-    
+
+
     while (1) {
-        
+
         showNowD( rx8900_getDate() );
         showNowHMS( rx8900_getTime() );
-        
+
         sleep_cpu();
-        
-        
-    }        
-    
-    
-}    
+
+
+    }
+
+
+}
 
 
 void contrastTest() {
-    
+
     // Contrast test pattern
     clearLCD();
     showNowD( 123456 );
@@ -1059,31 +1135,31 @@ void contrastTest() {
     }
 
 }
- 
-// Just a standardized run to measure power usage that should be close to real usage in run mode. 
+
+// Just a standardized run to measure power usage that should be close to real usage in run mode.
 
 void powerTest() {
 
     // LOW POWER TEST CODE
     // Meant to simulate a normal count
 
-    PIN4_INIT();
+    PINTOP_OUT();
 
     triggerPinDisable();
 
     while (1) {
-        PIN4_UP();
+        PINTOP_UP();
         displaydigit02F();
         displaydigit01O();
-        PIN4_DOWN();
+        PINTOP_DOWN();
         sleep_cpu();
         //_delay_ms(1000);
         displaydigit01F();
         displaydigit02O();
         sleep_cpu();
-    }    
-    
-}    
+    }
+
+}
 
 /////////////////////////////////////////////////////////////////////
 // The main function follows a work flow that has been standardized
@@ -1140,7 +1216,6 @@ int main(void)
 
     initFlash();
 
-
     triggerPinInit();       // Enable pullup and interrupts on trigger pin
 
     FOUT_in_pin_enable();
@@ -1154,31 +1229,32 @@ int main(void)
     CCP = CCP_IOREG_gc; //Trigger protection mechanism
     CLK.PSCTRL = CLK_PSADIV0_bm;             // Switch system clock /2
 
-*/
+
 
     while (0) {
         // Output pattern on pin 4 to check sys clock freq
-        PIN4_INIT();
+        PINTOP_OUT();
         while (1) {
-            PIN4_UP();
-            PIN4_DOWN();
+            PINTOP_UP();
+            PINTOP_DOWN();
         };
     }
 
+*/
 
     //powerTest();
-    
+
 
     // First check if this is our first time waking up ever...
 
     uint8_t flagreg = rx8900_getFlags();
-    
-    // Default to zero start count. We will update these from the RX8900 if this is a warm start. 
+
+    // Default to zero start count. We will update these from the RX8900 if this is a warm start.
     uint24_t d=0;
     uint8_t h=0;
     uint8_t m=0;
     uint8_t s=0;
-    
+
     // For now, you can hold the trigger pin down while inserting the battery to simulate a fresh power-up
 
     if ( triggerPinPressed() || flagreg & RX8900_FLAG_LV_BM) {
@@ -1188,9 +1264,6 @@ int main(void)
         // For now we will just go into wait-for-trigger mode
         // TODO: If we are just manufactured, then set local clock to UTC. Otherwise display a sad message telling people to return unit.
 
-        // For now, set time to 00:00:00 on power up
-
-        rx8900_init_regs();
 
         // Show "ready to load" counting pattern until trigger pin is pushed in
 
@@ -1206,46 +1279,57 @@ int main(void)
         // PRESSED - ARMED AND READY!
 
         figure8PatternUntilReleased();
-        
+
         // Ok! We are live now, people!
-        
+               
+
         // Save this moment so we do not forget it ever.
-        
+
         saveCurrentTimeFromRX8900ToEEPROM();
-                
-        clearLCD();
+        
+        // start counter
+
+        rx8900_init_regs();        
+        
+        
+        // Throw a 00000 000000 up on the screen while we flash so there is instant feedback that we started. 
+        showNowD( 0 );
+        showNowHMS( 0 );         
 
         flash();
 
-    } else {
-        
-        // TODO: Show something on warm start?
-        
-        // Read current time from RX8900. Since we started at 00:00:00 1/1/00, we can figure out what our current count is
-        // at least for the first 100 years....
-        
-        uint8_t reg[8];
+    } 
+    
+    
+    // Read (or reread if this was a cold start) current time from RX8900. Since we started at 00:00:00 1/1/00, we can figure out 
+    // what our current count is
+    // at least for the first 100 years....
+    
+    // While the reread is supurflous, I'm leaving it in so at least if there is a problem with the initial RTC time set
+    // then we will know about it now rather than in 80 years when the person goes to change the battery. 
 
-        USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0 , reg , 8 );      // Read ssmmhhwwddmmyycc from RX8900 (BCD values!)
-        
-        s = bcd2c( reg[0] );
-        m = bcd2c( reg[1] );
-        h = bcd2c( reg[2] );
-        // Skip weeks
-        uint8_t day  = bcd2c( reg[4] );
-        uint8_t mon  = bcd2c( reg[5] );
-        uint8_t year = bcd2c( reg[6] );
-        
-        d = rx8900_date_to_days( year , mon , day );        
-        
-        // TODO: Add centry count here (and update century count in year increment)
+    uint8_t reg[8];
 
-    }
+    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0 , reg , 8 );      // Read ssmmhhwwddmmyycc from RX8900 (BCD values!)
+       
+    s = bcd2c( reg[0] );
+    m = bcd2c( reg[1] );
+    h = bcd2c( reg[2] );
+    // Skip weeks
+    uint8_t day  = bcd2c( reg[4] );
+    uint8_t mon  = bcd2c( reg[5] );
+    uint8_t year = bcd2c( reg[6] );
+
+    d = rx8900_date_to_days( year , mon , day );
+
+    // TODO: Add century count here (and update century count in year increment)
 
 
     triggerPinDisable();           // So we do not waste current running though pull up and the switch forevermore....
 
     run( d , h , m , s );
+    
+    showGoodbye();
 
 }
 
@@ -1257,7 +1341,7 @@ int main(void)
 // occurs at a constant rate.
 
 // We leave it empty and just do all our processing when it returns.
-// It would be nice to avoid this alltoether, but I do not think it is possible on AVR.
+// It would be nice to avoid this altogethers, but I do not think it is possible on AVR.
 
 EMPTY_INTERRUPT(LCD_INT_vect);
 
