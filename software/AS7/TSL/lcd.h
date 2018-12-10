@@ -83,8 +83,30 @@ void displaydigit02F();
 // Level 0 is the outline
 
 void battSegOn( uint8_t level);
- 
+
 void battSegOff(uint8_t level);
- 
+
+
+ // Colons between 4th and 5th digit on each module
+
+ void colonLOn();
+
+ void colonLOff();
+
+ void colonROn();
+
+ void colonROff();
+
+
+// decimal points between 2th and 3th digit on each module
+
+void decimalLOn();
+
+void decimalLOff();
+
+void decimalROn();
+
+void decimalROff();
+
 
 #endif /* LCD_H_ */

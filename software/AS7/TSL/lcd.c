@@ -279,14 +279,60 @@ const lcd_visible_segment  digitmap[][7] = {
 // Level = 0-3
 // Level 0 is the outline
 
+// Just happens to work out that the different level indicators are on coresponding COM lines on the same SEG
+
 void battSegOn( uint8_t level) {
     lcd_set_pixel( level ,  LCD_SEG_L01 );
-    
+
 }
 
 void battSegOff(uint8_t level) {
     lcd_clear_pixel( level ,  LCD_SEG_L01 );
 }
+
+
+// Colons between 4th and 5th digit on each module
+
+void colonLOn() {
+    lcd_set_pixel( LCD_COM_L4 ,  LCD_SEG_L05 );
+
+}
+
+void colonLOff() {
+    lcd_clear_pixel( LCD_COM_L4,  LCD_SEG_L05 );
+}
+
+
+void colonROn() {
+    lcd_set_pixel( LCD_COM_R4 ,  LCD_SEG_R05 );
+
+}
+
+void colonROff() {
+    lcd_clear_pixel( LCD_COM_R4,  LCD_SEG_R05 );
+}
+
+
+// decimal points between 2th and 3th digit on each module
+
+void decimalLOn() {
+    lcd_set_pixel( LCD_COM_L4 ,  LCD_SEG_L09 );
+}
+
+void decimalLOff() {
+    lcd_clear_pixel( LCD_COM_L4,  LCD_SEG_L09 );
+}
+
+
+void decimalROn() {
+    lcd_set_pixel( LCD_COM_R4 ,  LCD_SEG_R09 );
+
+}
+
+void decimalROff() {
+    lcd_clear_pixel( LCD_COM_R4,  LCD_SEG_R09 );
+}
+
 
 
 void spinOn( uint8_t d,  uint8_t step ) {
@@ -419,7 +465,7 @@ void displaydigit( uint8_t d,  uint8_t n , uint8_t onFlag) {
 
 
 void displaydigit01O() {
-    
+
     uint8_t d =10;
     uint8_t n =1;
     uint8_t onFlag = 1;
@@ -442,7 +488,7 @@ void displaydigit01O() {
 
 
 void displaydigit01F() {
-    
+
     uint8_t d =10;
     uint8_t n =1;
     uint8_t onFlag = 0;
@@ -465,7 +511,7 @@ void displaydigit01F() {
 
 
 void displaydigit02O() {
-    
+
     uint8_t d =10;
     uint8_t n =2;
     uint8_t onFlag = 1;
@@ -488,7 +534,7 @@ void displaydigit02O() {
 
 
 void displaydigit02F() {
-    
+
     uint8_t d =10;
     uint8_t n =2;
     uint8_t onFlag = 0;
