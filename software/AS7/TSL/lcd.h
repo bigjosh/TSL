@@ -77,4 +77,14 @@ void displaydigit02O();
 void displaydigit01F();
 void displaydigit02F();
 
+
+// Battery icon
+// Level = 0-3
+// Level 0 is the outline
+
+void battSegOn( uint8_t level);
+ 
+void battSegOff(uint8_t level);
+ 
+
 #endif /* LCD_H_ */

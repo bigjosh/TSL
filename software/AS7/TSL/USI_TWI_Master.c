@@ -64,10 +64,20 @@ static inline void sda_pull_high(void) {
     PORTC.DIRCLR = _BV( 0 );
 }
 
+
+// Float the pin and disconnect input buffer
+
+static inline void sda_pull_disable(void) {
+    PORTC.DIRCLR = _BV( 0 );
+    PORTC.PIN0CTRL = PORT_OPC_TOTEM_gc | PORT_ISC_INPUT_DISABLE_gc;
+    
+}
+
+
+
 static inline void scl_drive_low(void) {
     PORTC.DIRSET = _BV( 1 );
 }
-
 
 static inline void scl_pull_high(void) {
     PORTC.DIRCLR = _BV( 1 );
@@ -76,6 +86,17 @@ static inline void scl_pull_high(void) {
 static inline uint8_t sda_read(void) {
     return PORTC.IN & _BV( 0 );
 }
+
+// Float the pin and disconnect input buffer
+
+static inline void scl_pull_disable(void) {
+    PORTC.DIRCLR = _BV( 1 );    
+    PORTC.PIN1CTRL = PORT_OPC_TOTEM_gc | PORT_ISC_INPUT_DISABLE_gc; 
+}
+
+
+
+
 
 /*---------------------------------------------------------------
  USI TWI single master initialization function
@@ -98,6 +119,18 @@ void USI_TWI_Master_Initialise( void )
 
   // This leaves us with both SCL and SDA high, which is an idle state
 }
+
+
+// Completely disconnect TWI pins and leave floating!
+
+void USI_TWI_Master_disable( void )
+{
+
+    sda_pull_disable();
+    scl_pull_disable();
+    
+}    
+
 
 // Write a byte out to the slave and look for ACK bit
 // Assumes SCL low, SDA doesn't matter

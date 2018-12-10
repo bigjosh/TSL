@@ -19,14 +19,14 @@
 *                     the USI module as basis. The implementation assumes the AVR to
 *                     be the only TWI master in the system and can therefore not be
 *                     used in a multi-master system.
-* Usage             : Initialize the USI module by calling the USI_TWI_Master_Initialise() 
+* Usage             : Initialize the USI module by calling the USI_TWI_Master_Initialise()
 *                     function. Hence messages/data are transceived on the bus using
 *                     the USI_TWI_Start_Transceiver_With_Data() function. If the transceiver
-*                     returns with a fail, then use USI_TWI_Get_Status_Info to evaluate the 
+*                     returns with a fail, then use USI_TWI_Get_Status_Info to evaluate the
 *                     couse of the failure.
 *
 ****************************************************************************/
-    #include<avr/io.h> 
+    #include<avr/io.h>
 //********** Defines **********//
 
 //********** Prototypes **********//
@@ -37,4 +37,9 @@ unsigned char USI_TWI_Get_State_Info( void );
 
 unsigned char USI_TWI_Read_Data(unsigned char slave,unsigned char addr, unsigned char *msg, unsigned char msgSize);
 
-unsigned char USI_TWI_Write_Data(unsigned char slave, unsigned char addr, const uint8_t *data , uint8_t size); 
+unsigned char USI_TWI_Write_Data(unsigned char slave, unsigned char addr, const uint8_t *data , uint8_t size);
+
+/// float pins and disable input buffers
+
+void USI_TWI_Master_disable( void );
+

@@ -274,6 +274,21 @@ const lcd_visible_segment  digitmap[][7] = {
 
 };
 
+
+// Battery icon
+// Level = 0-3
+// Level 0 is the outline
+
+void battSegOn( uint8_t level) {
+    lcd_set_pixel( level ,  LCD_SEG_L01 );
+    
+}
+
+void battSegOff(uint8_t level) {
+    lcd_clear_pixel( level ,  LCD_SEG_L01 );
+}
+
+
 void spinOn( uint8_t d,  uint8_t step ) {
 
     //LCD_MEM_REG( 3 , 19 ) |=  LCD_MEM_BIT( 3 , 19 );

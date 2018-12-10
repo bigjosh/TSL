@@ -9,6 +9,7 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
+#include <avr/eeprom.h>
 
 #include "lcd.h"
 
@@ -353,12 +354,27 @@ void disableUnusedIOPins() {
 
     PORTB.PIN0CTRL = PORT_ISC_INPUT_DISABLE_gc;
     PORTB.PIN1CTRL = PORT_ISC_INPUT_DISABLE_gc;
-    PORTB.PIN2CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    // PORTB.2 is connected to FOUT from the RX8900. It is input with pn change interrupt.
+    PORTB.PIN3CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTB.PIN4CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTB.PIN5CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTB.PIN6CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    // PORTB.2 is connected to FOE to the RX8900. It is driven high. .
 
-    PORTC.PIN0CTRL = PORT_ISC_INPUT_DISABLE_gc;
-    PORTC.PIN1CTRL = PORT_ISC_INPUT_DISABLE_gc;
+
+    // PORTC.0 is connected to SDA on RX8900. It has pullup.
+    // PORTC.1 is connected to SCL on RX8900. It has pullup.
+    // PORTC.2 is connected to PIN3 on ISP. It has pullup.
+    // PORTC.3 is connected to PIN4 on ISP. It has pullup.
     PORTC.PIN4CTRL = PORT_ISC_INPUT_DISABLE_gc;
     PORTC.PIN5CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTC.PIN6CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    // PORTC.7 is connected to the trigger switch. It has pullup until pin is pulled, then input disabled.
+
+    // PORTD.0 is connected to flash EFT. It has driven LOW.
+    // PORTD.1 is connected to flash EFT. It has driven LOW.
+
+
 
 }
 
@@ -411,9 +427,9 @@ inline void showNowRight( uint24_t d ) {
 
 
 inline void showNowYMD( uint8_t y , uint8_t m , uint8_t d ) {
-    
+
     digitShow( 0 , d % 10);
-    digitShow( 1 , d / 10 );    
+    digitShow( 1 , d / 10 );
 
     digitShow( 2 , m % 10);
     digitShow( 3 , m / 10 );
@@ -533,18 +549,18 @@ void triggerPinDisable() {
 
 }
 
-// Enable the pin on the XMEGA that gets the FOUT signal from the RX8900 and generates an inetrrupt to wake us
+// Enable the pin on the XMEGA that gets the FOUT signal from the RX8900 and generates an interrupt to wake us once per second
 
 void FOUT_in_pin_enable() {
     PORTB.PIN2CTRL = PORT_ISC_RISING_gc  ;        // Only interrupt once per second on the rising edge of the 1Hz FOE signal from the RTC
 
-    PORTB.INTCTRL = PORT_INT0LVL0_bm;            // PORTB int0 is low level
+    PORTB.INTCTRL = PORT_INT0LVL0_bm;            // PORTB int0 is low level interrupt
     PORTB_INT0MASK |= PIN2_bm;                   // Enable pin 7 to be int0
 }
 
 
 // Output a 1 on the pin connected to FOE
-// The idea here is that when Vcc power is dropped duirring a battery change,
+// The idea here is that when Vcc power is dropped during a battery change,
 // The FOE signal will drop quickly and turn off the FOUT and make the RX8900
 // coast longer
 
@@ -561,6 +577,10 @@ EMPTY_INTERRUPT(PORTB_INT0_vect);       // FOUT ISR. We don't care about ISR, ju
 // which is connected to PORTB.7. We will only generate an interrupt
 // on the rising edge, otherwise we'd get woken twice per sec.
 // The ISR is empty - we just use the INT to wake from sleep.
+
+
+// We enable an interrupt on the trigger pin so that the user gets immediate feedback rather than having to
+// wait for the 1-second interrupt to wake us up and check it.
 
 void triggerPinEnable() {
     PORTC.PIN7CTRL = PORT_OPC_PULLUP_gc | PORT_ISC_BOTHEDGES_gc ;        // Enable pull-up on trigger pin
@@ -612,12 +632,7 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
                         showNowS1s( so );
 
-                        // Short top right pins on ISP to speed up time for testing
-                        // TODO: Remove this diagnostic code
-
-                        if ( !PINTOP_TEST() ) {
-                            sleep_cpu();
-                        }
+                        sleep_cpu();
 
                         so++;
 
@@ -639,6 +654,8 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
 }
 
+
+
 // Pattern to show when we run out of digits in 2300 years...
 
 void showGoodbye() {
@@ -651,7 +668,7 @@ void showGoodbye() {
         showNowD( 0 );
         showNowRight( 999999 );
         sleep_cpu();
-    }        
+    }
 
 }
 
@@ -800,6 +817,28 @@ uint8_t c2bcd( uint8_t c ) {
 }
 
 
+// Grabs the current time from the RX8900 and shows it on the LCD
+// NOT POWER EFFICIENT - ONLY FOR TESTING
+
+void show_time_for_testing() {
+
+    uint8_t reg[8];
+
+    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0 , reg , 8 );      // Read ssmmhhwwddmmyycc from RX8900 (BCD values!)
+
+    uint8_t s = bcd2c( reg[0] );
+    showNowS10s( s / 10 );
+    showNowS1s( s % 10 );
+
+
+    uint8_t m = bcd2c( reg[1] );
+    showNowM( m );
+
+
+    uint8_t h = bcd2c( reg[2] );
+    showNowH( h );
+
+}
 
 // Set time, not BCD
 
@@ -856,28 +895,8 @@ uint24_t rx8900_getDate() {
 
 
 #define RX8900_FLAG_LV_BM (1<<1)       // The chip saw a low voltage so might have lost time/data
-#define RX8900_FLAG_NT_BM (1<<0)       // Volatge is too low for temp compensation
+#define RX8900_FLAG_NT_BM (1<<0)       // Voltage is too low for temp compensation
 
-// Check voltage state of RTC chip
-
-uint24_t rx8900_getFlags() {
-
-    uint8_t reg[1];
-
-    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , RX8900_FLAG_REG , reg , 1 );
-
-    return reg[0];
-
-}
-
-
-void rx8900_clearFlags() {
-
-    uint8_t reg=0x00;
-
-    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_FLAG_REG , &reg , 1 );
-
-}
 
 const uint8_t magicregs[] = {
     'T' ,      // RAM
@@ -907,46 +926,56 @@ uint8_t rx8900_check_magic() {
 
 void rx8900_open_MOS() {
 
-    uint8_t reg= RX8900_BACKUP_SWOFF_bm;
+    // Turn off the switch and disable the voltage detection system
+    // The datasheet strongly suggests that the switch can not be opened unless
+    // the voltage detect is disabled, which is a shame because we'd like to
+    // have the chip go into backup made when the voltage drops below 2.4V
+
+    uint8_t reg= RX8900_BACKUP_SWOFF_bm & RX8900_BACKUP_VDETOFF_bm;
 
     USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_BACKUP_REG , &reg , 1 );
 
 }
 
 
-// Initialize all regs to sane values at startup
-// TODO: Keep overflow in TEMP reg so we can run for centuries?
+// Close the MOS switch between Vdd and Vbat. Leaves voltage detector off
 
-void rx8900_init_regs() {
+void rx8900_close_MOS() {
+
+    // Turn on the switch and disable the voltage detection system
+
+    uint8_t reg= RX8900_BACKUP_VDETOFF_bm;
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_BACKUP_REG , &reg , 1 );
+
+}
 
 
-    // Note here we add the RESET flag. This will start the timer at the begining of the first second.
+// Returns 1 if the RX8900 has seen a low voltage - which means its data is not trustworthy
+// and it needs a RESET.
 
-    uint8_t contrlreg = 0b01000001;     // 2s temp comp, no timers or interrupts or alarms, reset
-    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_CONTROL_REG, &contrlreg, 1 );
+uint8_t rx8900_check_low_voltage() {
 
-    rx8900_open_MOS();      // Set backup reg
+    uint8_t save_flags_reg;
 
-    rx8900_fout_1Hz();      // Enable FOUT at 1Hz (sets extension reg)
+    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , RX8900_FLAG_REG , &save_flags_reg , 1 );
 
-    rx8900_clearFlags();            // Clear all the flags, in case a tick had already happened. 
-                                    // Do this withing 1 sec of the RESET to avoid missing a tick.
+    return (save_flags_reg & RX8900_FLAG_LV_BM);
 
-    uint8_t timeregs[] = {
-        c2bcd(  0 ),      // SEC
-        c2bcd(  0 ),      // MIN
-        c2bcd(  0 ),      // HOUR
-        c2bcd(  0 ),      // WEEK
-        c2bcd(  1 ) ,      // DAY
-        c2bcd(  1 ),      // MONTH
-        c2bcd(  0 ),      // YEAR
-        c2bcd(  0 ),      // TEMP (we will use for overflow count)
-    };
+}
 
-    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00 , timeregs , 8 );
+
+// Clears the VLF (voltage to low for operation) and VDET (voltage was too low for temp compensation) flags
+
+void rx8900_clear_voltage_flags() {
+
+    uint8_t zero=0;
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_FLAG_REG , &zero , 1 );
 
 
 }
+
 
 /*
 
@@ -985,14 +1014,13 @@ static const unsigned int daysSoFarByMonth[] = { 0,0,31,59,90,120,151,181,212,24
 // rx8900_date_to_days( 0 , 2, 1 ) = 31
 // rx8900_date_to_days( 1 , 1, 1 ) = 366 (00 is a leap year!)
 
-static inline uint24_t rx8900_date_to_days( uint8_t y , uint8_t m, uint8_t d ) {
+static uint32_t rx8900_date_to_days( uint8_t y , uint8_t m, uint8_t d ) {
 
     uint24_t dayCount=0;
 
     // Count days in years past (not counting leap years yet)
 
-    dayCount += (uint24_t)y * 365;      // 365 days per year past in normal years
-
+    dayCount += (uint32_t)y * 365UL;      // 365 days per year past in normal years
 
     if (y) {   // Don't even look if year is 0
 
@@ -1020,6 +1048,180 @@ static inline uint24_t rx8900_date_to_days( uint8_t y , uint8_t m, uint8_t d ) {
 
 }
 
+// Used for reading and writing registers 0-7 to the RX8900.
+// These are the registers that hold the time, plus the RAM reg that we can use to put stuff in
+
+typedef  struct  {
+
+    uint8_t time_regs[8];
+
+} rx8900_time_regs_block_t;
+
+// Set to Midnight Jan 1 00
+
+static void rx8900_time_regs_reset( rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+
+    rx8900_time_regs_block->time_regs[0] = c2bcd(  0 ),      // SEC
+    rx8900_time_regs_block->time_regs[1] = c2bcd(  0 ),      // MIN
+    rx8900_time_regs_block->time_regs[2] = c2bcd(  0 ),      // HOUR
+    rx8900_time_regs_block->time_regs[3] = c2bcd(  1 ),      // WEEK
+    rx8900_time_regs_block->time_regs[4] = c2bcd(  1 ) ,     // DAY
+    rx8900_time_regs_block->time_regs[5] = c2bcd(  1 ),      // MONTH
+    rx8900_time_regs_block->time_regs[6] = c2bcd(  0 ),      // YEAR
+    rx8900_time_regs_block->time_regs[7] = c2bcd(  0 ),      // RAM (we use for century interlock)
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00 , rx8900_time_regs_block->time_regs , 8 );
+
+}
+
+// Load from chip
+
+static void rx8900_time_regs_get( rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0x00 , rx8900_time_regs_block->time_regs, 8 );
+}
+
+
+// Save to chip
+
+static void rx8900_time_regs_set( const rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00 , rx8900_time_regs_block->time_regs, 8 );
+}
+
+/*
+
+    Layout of EEPROM:
+
+    Bytes   0-7: Start_time.  rx8900_time_regs_block_t set by factory to GMT time of initial programming
+    Bytes  8-15: Trigger_time. Set to the current time the moment the trigger is pulled.
+    Byte     16: Start_flag.  0=Never been started, 1=Been started. Set to 1 on initial power up when we copy the start time to the RTC.
+    Byte     17: Trigger_flag 0=Never been triggered. Set to 1 when trigger pin pulled.Trigger_time fields also set then
+
+*/
+
+#define TIMEBLOCK_SIZE 8
+
+#define EEPROM_ADDRESS(x) (( void *) x )
+
+#define EEPROM_ADDRESS_STARTIME     EEPROM_ADDRESS( 0)           // Set by the at the Factory to real time GMT when initially programmed
+#define EEPROM_ADDRESS_TRIGGERTIME  EEPROM_ADDRESS( 8)           // Set by the RTC when the trigger pin is pulled
+#define EEPROM_ADDRESS_STARTFLAG    EEPROM_ADDRESS( 9)           // Set when the STARTTIME is transfered from EEPROM to RTC the first time we power up
+#define EEPROM_ADDRESS_TRIGGERFLAG  EEPROM_ADDRESS(10)           // Set when the trigger pin is pulled and the RTC time is aves to the TRIGGER_TIME block
+
+
+static void load_time_regs_from_EEPROM( void *eeprom_start_address , rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+
+    eeprom_read_block( rx8900_time_regs_block->time_regs , eeprom_start_address,  TIMEBLOCK_SIZE );
+
+}
+
+static void save_time_regs_to_EEPROM( void *eeprom_start_address , const rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+
+    eeprom_write_block( rx8900_time_regs_block->time_regs , eeprom_start_address,  TIMEBLOCK_SIZE );
+
+}
+
+static void save_start_flag_to_EEPROM() {
+    eeprom_write_byte( EEPROM_ADDRESS_STARTFLAG , 1 );
+}
+
+static uint8_t load_start_flag_from_EEPROM() {
+    return eeprom_read_byte( EEPROM_ADDRESS_STARTFLAG );
+}
+
+static void save_trigger_flag_to_EEPROM() {
+    eeprom_write_byte( EEPROM_ADDRESS_TRIGGERFLAG , 1 );
+}
+
+static uint8_t load_trigger_flag_from_EEPROM() {
+    return eeprom_read_byte( EEPROM_ADDRESS_TRIGGERFLAG );
+}
+
+
+
+/*
+
+    Century interlock explained:
+
+    The RX8900 only save 2 digits for the year, so when we roll from 2099 to 2100, the year will go from 99 to 0.
+    This would make us loose 100 years worth of days on the first battery change of the new century when we go to
+    compute how long since the pin was pulled.
+
+    To buy ourselves an extra 100 years (till 2200), we use a century interlock stored in the RAM register of the RX8900.
+    When we first program a unit (presumably in the 1st half of the 2000 century), we set the interlock to 0.
+
+    On every battery change (every 10 - 30 years? We'll see!), we check the current year. If it is greater than 50
+    and the century interlock is even, then we increment the century interlock. If it is less than 50  and the century
+    interlock is odd, then we increment the century interlock.
+
+    When we want to compute the total days elapsed since epoch Jan 1, 2000 then we just divide the century interlock by
+    2 and drop the remainder. We when multiply this by the number of days in an RX8900 century and we will get the correct value.
+
+    This will get us an additional 127 centuries of run time, which puts us at the year 14700. We will need to patch the firmware before
+    then if we want to continue to keep accurate count.
+
+*/
+
+
+// Convert to days since Midnight Jan 1, 2000
+// including the century interlock
+
+static uint32_t rx8900_time_regs_days_since_epoch( rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+
+    uint8_t d = bcd2c( rx8900_time_regs_block->time_regs[4] );
+    uint8_t o = bcd2c( rx8900_time_regs_block->time_regs[5] );     // Month
+    uint8_t y = bcd2c( rx8900_time_regs_block->time_regs[6] );
+    uint8_t i = bcd2c( rx8900_time_regs_block->time_regs[7] );     // Century interlock flag
+
+    uint8_t c = i / 2;
+
+    uint32_t days_in_previous_centuries= c *  ( 365UL * 100UL ) + ( (100UL / 4UL ) );        // (365 days/year * 100 years) + ( 100 years * ( 1 leap day / 4 years ) )
+
+    return rx8900_date_to_days( y , o , d ) + days_in_previous_centuries;
+
+}
+
+
+// Convert to days since Midnight Jan 1, 2000
+// including the century interlock
+
+static uint32_t rx8900_time_regs_secs_since_midnight( rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+
+    uint8_t s = bcd2c( rx8900_time_regs_block->time_regs[0] );
+    uint8_t m = bcd2c( rx8900_time_regs_block->time_regs[1] );
+    uint8_t h = bcd2c( rx8900_time_regs_block->time_regs[2] );
+
+    return s + ( m * 60 ) + ( h * 3600 );               // Easy peasy
+
+}
+
+
+// Reset RX8900 and initialize all regs to sane values at startup
+// TODO: also clears the VLF flag which is set by reset
+// TODO: Keep overflow in TEMP reg so we can run for centuries?
+
+void rx8900_init() {
+
+    // Note here we add the RESET flag. This will start the timer at the beginning of the first second.
+
+    uint8_t contrlreg = 0b01000001;     // 2s temp comp, no timers or interrupts or alarms, reset
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_CONTROL_REG, &contrlreg, 1 );
+
+    // Set registers to sensical initial values
+
+    /*
+
+    rx8900_time_regs_block_t rx8900_time_regs_block;
+
+    rx8900_time_regs_reset( &rx8900_time_regs_block );
+
+    */
+
+    // Enable FOUT at 1Hz (sets extension reg)
+
+    rx8900_fout_1Hz();
+
+}
 
 void digitPatternUntilPressed() {
     // Show a marching countdown pattern until button pressed...
@@ -1079,7 +1281,12 @@ void figure8PatternUntilReleased() {
 
 }
 
+// Sets the RTC based on the time stored in the first 8 bytes of EEPROM
 
+void rx8900_set_from_eeprom() {
+
+
+}
 
 // Read out the current time from the RX8900 registers and save it to XMEGA EEPROM
 
@@ -1093,7 +1300,7 @@ void saveCurrentTimeFromRX8900ToEEPROM() {
 void leaptester() {
 
 
-    rx8900_init_regs();
+    rx8900_init();
 
     rx8900_setDate( 0  , 2 , 28 );
 
@@ -1161,40 +1368,117 @@ void powerTest() {
 
 }
 
-/////////////////////////////////////////////////////////////////////
-// The main function follows a work flow that has been standardized
-// within the ASF for Xmega devices. This means that when searching
-// through Xmega example projects in ASF, you will find a main
-// function with the same general flow:
-//
-// sysclk_init();
-// pmic_init();
-// board_init();
-// -- peripheral initialization --
-// while(1) {
-//     -- application code --
-// }
-//
-/////////////////////////////////////////////////////////////////////
+
+
+// Run like a normal clock
+// Read current time from RTC and show on the display
+
+void clock() {
+
+    // When we get here, the LCD is working and we have a 1Hz signal coming from the RTC
+    // that will wake us up from low power sleep.
+
+    // Read (or reread if this was a cold start) current time from RX8900. Since we started at 00:00:00 1/1/00, we can figure out
+    // what our current count is
+    // at least for the first 100 years....
+
+    // While the reread is superfluous, I'm leaving it in so at least if there is a problem with the initial RTC time set
+    // then we will know about it now rather than in 80 years when the person goes to change the battery.
+
+    rx8900_time_regs_block_t time_now;
+
+    rx8900_time_regs_get( &time_now );
+
+    // Default to zero start count. We will update these from the RX8900 if this is a warm start.
+    uint24_t d=0;
+    uint8_t h=0;
+    uint8_t m=0;
+    uint8_t s=0;
+
+    s = bcd2c( time_now.time_regs[0] );
+    m = bcd2c( time_now.time_regs[1] );
+    h = bcd2c( time_now.time_regs[2] );
+    // Skip weeks
+    uint8_t day  = bcd2c( time_now.time_regs[4] );
+    uint8_t mon  = bcd2c( time_now.time_regs[5] );
+    uint8_t year = bcd2c( time_now.time_regs[6] );
+
+    d = rx8900_date_to_days( year , mon , day );
+
+    // TODO: Add century count here (and update century count in year increment)
+
+    triggerPinDisable();           // So we do not waste current running though pull up and the switch forevermore....
+
+    run( d , h , m , s );
+
+    showGoodbye();
+
+
+}
+
+// Blink the battery indicators on and off at 0.5Hz
+
+void batterydescending() {
+
+    battSegOn(0);       // Outline always on
+
+
+    while (1) {
+
+        battSegOn(3);
+        battSegOn(2);
+        battSegOn(1);
+        sleep_cpu();
+
+
+        battSegOff(1);
+        sleep_cpu();
+
+        battSegOff(2);
+        sleep_cpu();
+
+        battSegOff(3);
+        sleep_cpu();
+
+
+
+    };
+}
+
+void batteryemptyblink() {
+
+    battSegOn(0);       // Outline always on
+
+    while (1) {
+
+        battSegOn(3);
+        sleep_cpu();
+
+
+        battSegOff(3);
+        sleep_cpu();
+
+
+
+    };
+}
+
+
 int main(void)
 {
 
 
+
     // Enable the ultra low power RTC clock
     // We will drive the LCD from this
-    //enable_rtc_ulp();
 
     enable_rtc_ulp();
 
-    //enable_rtc_32Kxtal();     // Saves 0.3uA over ULP. Worth the savings for the extra part?
+    //enable_rtc_32Kxtal();     // There is provision to install this on the PCB. Saves 0.3uA over ULP. Worth the savings for the extra part?
 
-    //switchSysclk2Xtal();      // Massively not worth it!
+    disableUnusedIOPins();      // Save a little power by disdabling the input buffers on all unused pins
 
-    // enable_rtc_TOSC1_32K();  // Also massively not worth it!
-
-    disableUnusedIOPins();      // Save a little power
-
-    USI_TWI_Master_Initialise();        // Init TWO pins to pullup. Keep them from floating to save power.
+    USI_TWI_Master_Initialise();        // Init TWI pins to pullup.
 
     initTestPins();             // Set pullups on the 2 extra pins on the ISP just to keep them from floating. We can also uses these for diagnostics and programming.
 
@@ -1208,19 +1492,154 @@ int main(void)
 	// Enable LOW priority interrupts (we only use low)
     CPU_CCP = CCP_IOREG_gc;             // TODO: I think this is not needed?
     PMIC.CTRL |= PMIC_LOLVLEN_bm;
-	sei();
 
 	set_sleep_mode( SLEEP_SMODE_PSAVE_gc );     // Lowest power sleep with LCD
 
-	sleep_enable();
+	sleep_enable();         // This chip needs you to tell it that it is ok to sleep before the sleep instruction will actually work
 
-    initFlash();
+    initFlash();            // Enable output on the pins that control the transistors that flash the flash LEDs
 
     triggerPinInit();       // Enable pullup and interrupts on trigger pin
 
-    FOUT_in_pin_enable();
+    output1onFOEpin();      // Enable the 1Hz output from the RTC via its Frequency Output Enable pin
 
-    output1onFOEpin();
+
+
+    _delay_ms(3000);        // tSTA RX8900 oscillator stabilization time 3s max
+                            // "Please perform initial setting only tSTA (oscillation start time), when the
+                            // built-in oscillation is stable."
+
+    uint8_t reset_flag=0;
+
+    if ( rx8900_check_low_voltage() ) {
+
+        // We have seen a low voltage, so we need to reset the rx8900
+        rx8900_init();
+
+        // Clear the low voltage flag
+        rx8900_clear_voltage_flags();
+
+
+        reset_flag = 1;
+
+    }
+
+    /*
+
+    // First time power up set the clock from the block stored
+    // in the eeprom for us by the factory programmer
+
+    rx8900_time_regs_block_t time_regs;
+
+    load_time_regs_from_EEPROM( EEPROM_ADDRESS_STARTIME , &time_regs );
+
+    rx8900_time_regs_set( &time_regs );
+
+    */
+
+
+    _delay_ms(10);           // Give that a second to warm up
+
+    // Enable the 1Hz output on the RTC
+    // Note that this clears the flags, so make sure to grab the low voltage flag first
+
+
+    FOUT_in_pin_enable();   // Enable an interrupt on the rising edge of the 1Hz FOUT coming from the RTC
+
+
+    rx8900_open_MOS();      // Open the switch that connects Vcc to Vbat. This way when the person pulls the battery out, the
+                            // capacitor connected to Vbat will not be connected to the XMEGA and will only be used to power the RTC
+
+    // This also disables voltage detection because it seems you can not open the switch with it enabled.
+
+
+    sei();                  // Note that all our ISR are empty, we only use interrupts to wake from sleep.
+                            // TODO: FInd a way to stop ISR from running
+
+
+    // When we get here, the LCD is working and we have a 1Hz signal coming from the RTC
+    // that will wake us up from low power sleep.
+
+    /*
+    rx8900_time_regs_block_t time_regs;
+
+    load_time_regs_from_EEPROM( EEPROM_ADDRESS_STARTIME , &time_regs );
+
+    rx8900_time_regs_set( &time_regs );
+
+    */
+
+    batteryemptyblink();
+    clock();
+
+    // Read (or reread if this was a cold start) current time from RX8900. Since we started at 00:00:00 1/1/00, we can figure out
+    // what our current count is
+    // at least for the first 100 years....
+
+    // While the reread is superfluous, I'm leaving it in so at least if there is a problem with the initial RTC time set
+    // then we will know about it now rather than in 80 years when the person goes to change the battery.
+
+
+
+    // Grab the Flags before we clear them in the next step.
+    // Mostly we care about the low voltage flag that tells us if the RTC is already running
+    // or this is a initial power up.
+
+    if (reset_flag) {
+
+
+    } else {
+
+        if (!rx8900_check_magic() ) {
+
+            showNowD( 888888 );
+
+        } else {
+
+            showNowD( 111111 );
+
+        }
+
+
+    }
+
+
+
+    show_time_for_testing();
+
+    triggerPinDisable();
+
+    #warning
+    //USI_TWI_Master_disable();       // Done talking to RTC?
+
+    // No updates power testing.
+    // Baseline             : 5.1uA @ 3.5V
+    // TWI pullups disabled : 5.2uA @ 3.5V
+    // sei()                : 5.2uA @ 3.5V
+
+    sei();
+
+    // EEPROM Power Reduction Mode and disable unused flash bank - supposedly lowers power but does not show in testing
+
+    //NVM.CTRLB = NVM_EPRM_bm | NVM_FPRM_bm;
+
+    while (1) {
+
+        sleep_cpu();
+
+    }
+
+
+    triggerPinDisable();
+
+    // Here we have sleep mode all set up, and the 1Hz FOUT from the RTC set to generate an interrupt
+    // to wake us.
+
+    sei();
+
+    //TESTING
+    digitPatternUntilPressed();
+    figure8PatternUntilReleased();
 
 /*
 
@@ -1245,19 +1664,12 @@ int main(void)
     //powerTest();
 
 
-    // First check if this is our first time waking up ever...
-
-    uint8_t flagreg = rx8900_getFlags();
-
-    // Default to zero start count. We will update these from the RX8900 if this is a warm start.
-    uint24_t d=0;
-    uint8_t h=0;
-    uint8_t m=0;
-    uint8_t s=0;
 
     // For now, you can hold the trigger pin down while inserting the battery to simulate a fresh power-up
 
-    if ( triggerPinPressed() || flagreg & RX8900_FLAG_LV_BM) {
+    if ( triggerPinPressed() || reset_flag ) {
+
+        // LV flag means that the RTC saw a low voltage, so values may not be accurate
 
         // We are new to the world (or our batteries were out too long)
 
@@ -1281,55 +1693,32 @@ int main(void)
         figure8PatternUntilReleased();
 
         // Ok! We are live now, people!
-               
+
 
         // Save this moment so we do not forget it ever.
 
         saveCurrentTimeFromRX8900ToEEPROM();
-        
+
         // start counter
 
-        rx8900_init_regs();        
-        
-        
-        // Throw a 00000 000000 up on the screen while we flash so there is instant feedback that we started. 
+
+
+        // Throw a 00000 000000 up on the screen while we flash so there is instant feedback that we started.
         showNowD( 0 );
-        showNowHMS( 0 );         
+        showNowHMS( 0 );
 
         flash();
 
-    } 
-    
-    
-    // Read (or reread if this was a cold start) current time from RX8900. Since we started at 00:00:00 1/1/00, we can figure out 
+    }
+
+
+    // Read (or reread if this was a cold start) current time from RX8900. Since we started at 00:00:00 1/1/00, we can figure out
     // what our current count is
     // at least for the first 100 years....
-    
-    // While the reread is supurflous, I'm leaving it in so at least if there is a problem with the initial RTC time set
-    // then we will know about it now rather than in 80 years when the person goes to change the battery. 
 
-    uint8_t reg[8];
+    // While the reread is superfluous, I'm leaving it in so at least if there is a problem with the initial RTC time set
+    // then we will know about it now rather than in 80 years when the person goes to change the battery.
 
-    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0 , reg , 8 );      // Read ssmmhhwwddmmyycc from RX8900 (BCD values!)
-       
-    s = bcd2c( reg[0] );
-    m = bcd2c( reg[1] );
-    h = bcd2c( reg[2] );
-    // Skip weeks
-    uint8_t day  = bcd2c( reg[4] );
-    uint8_t mon  = bcd2c( reg[5] );
-    uint8_t year = bcd2c( reg[6] );
-
-    d = rx8900_date_to_days( year , mon , day );
-
-    // TODO: Add century count here (and update century count in year increment)
-
-
-    triggerPinDisable();           // So we do not waste current running though pull up and the switch forevermore....
-
-    run( d , h , m , s );
-    
-    showGoodbye();
 
 }
 
