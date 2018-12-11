@@ -375,6 +375,28 @@ void disableUnusedIOPins() {
     // PORTD.1 is connected to flash EFT. It has driven LOW.
 
 
+    // PORTG and PORTM are alternate functions on the LCD pins
+    // Do we need to disable them when LCD function is in use?
+    // I really could not find out from the datasheet so better safe than
+    // sorry since these pins have intermediate voltages on them all the time
+    // from the LCD phases
+
+    PORTG.PIN0CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN1CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN2CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN3CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN4CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN5CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN6CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN7CTRL = PORT_ISC_INPUT_DISABLE_gc;
+
+    PORTM.PIN0CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN1CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN2CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN3CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN4CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN5CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN7CTRL = PORT_ISC_INPUT_DISABLE_gc;
 
 }
 
@@ -612,64 +634,11 @@ void triggerPinInit() {
 }
 
 inline uint8_t triggerPinPresent() {
-    return( !( PORTC.IN & _BV(7) ) );   // The pin presses down on the switch, which grounds the pull-up
+    return(  PORTC.IN & _BV(7)  );   // Switch grounds pin when closed. The pin presses open the switch.
 }
 
 EMPTY_INTERRUPT(PORTC_INT0_vect);       // Trigger pin ISR. We don't care about ISR, just want to have the interrupt to wake us up.
 
-
-// Returns when we hit 999999 days = 2739.72329 years.
-
-void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
-
-    // Enable pull-up on test pin for diagnostic time speed up for testing
-    // TODO: remove this diagnostic code
-    PINTOP_IN();
-
-    uint8_t st = s/10;          // seconds tens place
-    uint8_t so = s - (st*10);   // seconds ones place
-
-    while (d<1000000) {
-
-        showNowD( d );
-
-        while (h<24) {
-
-            showNowH(h);
-
-            while (m<60) {
-
-                showNowM(m);
-
-                while (st<6) {
-
-                    showNowS10s( st );
-
-                    while (so<10) {
-
-                        showNowS1s( so );
-
-                        sleep_cpu();
-
-                        so++;
-
-                    }
-                    so=0;
-                    st++;
-                }       // s
-
-                st=0;
-                m++;
-            }           // m
-
-            m=0;
-            h++;
-        }               // h
-        h=0;
-        d++;
-    }                   // d
-
-}
 
 
 
@@ -982,6 +951,20 @@ uint8_t rx8900_check_low_voltage() {
 }
 
 
+// Returns 1 if the RX8900 has seen a voltage below 2.4V - which means
+// that it is no longer doing temperature corrections
+
+uint8_t rx8900_check__voltage_24() {
+
+    uint8_t save_flags_reg;
+
+    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , RX8900_FLAG_REG , &save_flags_reg , 1 );
+
+    return (save_flags_reg & RX8900_FLAG_LV_BM);
+
+}
+
+
 // Clears the VLF (voltage to low for operation) and VDET (voltage was too low for temp compensation) flags
 
 void rx8900_clear_voltage_flags() {
@@ -1144,7 +1127,7 @@ static void load_starttime_from_EEPROM( rx8900_time_regs_block_t *rx8900_time_re
 
 }
 
-static void save_starttime_from_EEPROM( const rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+static void save_starttime_to_EEPROM( const rx8900_time_regs_block_t *rx8900_time_regs_block ) {
 
     save_time_regs_to_EEPROM( EEPROM_ADDRESS_STARTIME , rx8900_time_regs_block );
 
@@ -1157,7 +1140,7 @@ static void load_triggertime_from_EEPROM( rx8900_time_regs_block_t *rx8900_time_
 
 }
 
-static void save_triggertime_from_EEPROM( const rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+static void save_triggertime_to_EEPROM( const rx8900_time_regs_block_t *rx8900_time_regs_block ) {
 
     save_time_regs_to_EEPROM( EEPROM_ADDRESS_TRIGGERTIME , rx8900_time_regs_block );
 
@@ -1239,6 +1222,83 @@ static uint32_t rx8900_time_regs_secs_since_midnight( rx8900_time_regs_block_t *
 
 }
 
+
+typedef struct {
+
+    uint8_t s;
+    uint8_t m;
+    uint8_t h;
+
+    uint32_t d;
+
+} time_count_t;
+
+
+void rx8900_time_regs_to_count( time_count_t *count , rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+
+    count->s = bcd2c( rx8900_time_regs_block->time_regs[0] );
+    count->m = bcd2c( rx8900_time_regs_block->time_regs[1] );
+    count->h = bcd2c( rx8900_time_regs_block->time_regs[2] );
+
+    count->d = rx8900_time_regs_days_since_epoch( rx8900_time_regs_block );
+}
+
+// difference = minuend - subtrahend
+// returns 1 if subtrahend  >  minuend (error)
+
+// Note that max value for any of these elements is 60, so borrowing can not overflow a uint8_t (255)
+
+static uint8_t time_count_subtract( time_count_t *difference , time_count_t *minuend ,  time_count_t *subtrahend ) {
+
+    uint8_t borrowed_minutes =0;
+
+    if ( subtrahend->s > minuend->s ) {
+
+        minuend->s += 60;
+
+        borrowed_minutes =1;
+
+    }
+
+    difference->s = minuend->s - subtrahend->s;
+
+    uint8_t borrowed_hours =0;
+
+    if ( (subtrahend->m + borrowed_minutes) > minuend->m ) {
+
+        minuend->m += 60;
+
+        borrowed_hours = 1;
+
+    }
+
+    difference->m = minuend->m - ( subtrahend->m + borrowed_minutes );
+
+    uint8_t borrowed_days =0;
+
+    if ( (subtrahend->h + borrowed_minutes ) > minuend->h ) {
+
+        minuend->h += 24;
+
+        borrowed_days = 1;
+
+    }
+
+    difference->h = minuend->h - ( subtrahend->h + borrowed_hours );
+
+    if ( (subtrahend->d + borrowed_days) > minuend->d ) {
+
+        // Error! subtrahend was bigger than minuend!
+
+        return 1;
+
+    }
+
+    difference->d =  minuend->d - ( subtrahend->d + borrowed_days );
+
+    return 0;
+
+}
 
 // Reset RX8900 and initialize all regs to sane values at startup
 // TODO: also clears the VLF flag which is set by reset
@@ -1414,41 +1474,7 @@ void powerTest() {
 }
 
 
-
-
-// Run like a normal clock
-// Read current time from RTC and show on the display
-
-static void showClockTimeX( rx8900_time_regs_block_t *time_now ) {
-
-    // Default to zero start count. We will update these from the RX8900 if this is a warm start.
-    uint24_t d=0;
-    uint8_t h=0;
-    uint8_t m=0;
-    uint8_t s=0;
-
-    s = bcd2c( time_now->time_regs[0] );
-    m = bcd2c( time_now->time_regs[1] );
-    h = bcd2c( time_now->time_regs[2] );
-    // Skip weeks
-    uint8_t day  = bcd2c( time_now->time_regs[4] );
-    uint8_t mon  = bcd2c( time_now->time_regs[5] );
-    uint8_t year = bcd2c( time_now->time_regs[6] );
-
-    d = rx8900_date_to_days( year , mon , day );
-
-    // TODO: Add century count here (and update century count in year increment)
-
-    triggerPinDisable();           // So we do not waste current running though pull up and the switch forevermore....
-
-    run( d , h , m , s );
-
-    showGoodbye();
-
-}
-
-
-// Run like a normal clock
+// Look like a normal clock
 // Read current time from RTC and show on the display
 // INdicates clock time with blinking decimal point on left module and colon on right module
 
@@ -1465,22 +1491,6 @@ static void showClockTime( rx8900_time_regs_block_t *time_now ) {
     showNowMDY( o , d , y );
     showNowHMS( h , m , s );
 
-    // Blink the colons to indicate clock mode
-
-    if (s & 0x01) {
-
-        decimalLOn();
-        decimalROn();        
-        colonLOn();        
-        colonROn();
-
-    } else {
-        decimalLOff();
-        decimalROff();
-        colonLOff();
-        colonROff();
-    }
-
 }
 
 // Blink the battery indicators on and off at 0.5Hz
@@ -1488,7 +1498,6 @@ static void showClockTime( rx8900_time_regs_block_t *time_now ) {
 void batterydescending() {
 
     battSegOn(0);       // Outline always on
-
 
     while (1) {
 
@@ -1529,6 +1538,128 @@ void batteryemptyblink() {
 
     };
 }
+
+void blink_forever() {
+    while (1) {
+
+        lcd_blank();
+        sleep_cpu();
+        lcd_unblank();
+        sleep_cpu();
+
+    }
+
+    __builtin_unreachable();
+}
+
+// Somehow trigger time > now time?
+
+void impossible_future_mode() {
+
+    showNowD( 888888 );
+    showNowHMSx( 777777 );
+
+    blink_forever();
+
+    __builtin_unreachable();
+}
+
+// We powered up to find that we have been triggered previously, but the RTC does not know what time it is
+// This is because either the battery went so dead that the RTC stopped, or the batteries we removed too long
+// and the RTC backup capacitor went dead.
+
+void where_has_the_time_gone_mode( rx8900_time_regs_block_t *trigger_time ) {
+
+    // "Where Has the Time Gone mode"
+
+    showClockTime( trigger_time );
+
+    // Show the trigger time blinking forever.
+    // To fix this, they will need to reprogram the current time into this unit
+
+    blink_forever();
+
+    __builtin_unreachable();
+
+}
+
+// We powered up to find that we have never been triggered, and the RTC does not know what time it is
+// This is because either the battery went completely flat or was left out too long on this unit that
+// had never been fired. We choose to not let the person fire without knowing what time it is now because
+// then there would be no way to get the count back if they ever had a flat or missing battery event again
+// after they pulled the trigger.
+
+void late_to_the_party_mode() {
+
+    // Show "------ ------"
+
+    for(uint8_t n=0; n<LCD_DIGITS; n++ ) {
+
+        showDash( n );
+
+    }
+
+    blink_forever();
+
+    __builtin_unreachable();
+
+}
+
+
+// Returns when we hit 999999 days = 2739.72329 years.
+
+void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
+
+    // Enable pull-up on test pin for diagnostic time speed up for testing
+    // TODO: remove this diagnostic code
+    PINTOP_IN();
+
+    uint8_t st = s/10;          // seconds tens place
+    uint8_t so = s - (st*10);   // seconds ones place
+
+    while (d<1000000 && !rx8900_check_low_voltage() ) {
+
+        showNowD( d );
+
+        while (h<24) {
+
+            showNowH(h);
+
+            while (m<60) {
+
+                showNowM(m);
+
+                while (st<6) {
+
+                    showNowS10s( st );
+
+                    while (so<10) {
+
+                        showNowS1s( so );
+
+                        sleep_cpu();
+
+                        so++;
+
+                    }
+                    so=0;
+                    st++;
+                }       // s
+
+                st=0;
+                m++;
+            }           // m
+
+            m=0;
+            h++;
+        }               // h
+        h=0;
+        d++;
+    }                   // d
+
+}
+
+
 
 
 int main(void)
@@ -1585,21 +1716,64 @@ int main(void)
                             // "Please perform initial setting only tSTA (oscillation start time), when the
                             // built-in oscillation is stable."
 
-    // Enable the 1Hz output on the RTC
-    // Note that this clears the flags, so make sure to grab the low voltage flag first
-
-    uint8_t reset_flag=0;
-
+   
     #warning testing
     if ( 1 ||rx8900_check_low_voltage() ) {
 
-        // We have seen a low voltage, so we need to reset the rx8900
+        // We have seen a low voltage, so we need to set the rx8900
         rx8900_init();
 
         // Clear the low voltage flag
         rx8900_clear_voltage_flags();
 
-        if ( 1 || load_start_flag_from_EEPROM() == 0x00 ) {      // 0x00 indicates that the start block has the current time and we have not set it yet.
+        if ( 1 || load_start_flag_from_EEPROM() != 0x00 ) {      // 0x00 indicates that the start block has the current time and we have not set it yet.
+
+            // The RTC is not set, but this is not the first time we are starting.
+
+            // Oh no! We just started up with low voltage on the RTC and it is not the initial start!
+            // We do not know what time it is now! Bo place good to go from here.
+
+            if ( load_trigger_flag_from_EEPROM() == 0x01 ) {
+
+                // We have triggered.
+
+                // We have already triggered! There is not much we can do here except tell the user that we know
+                // when they triggered, but can not show a count.  Hopefully they will get the current time programmed
+                // back into the RTC and revive their count!
+
+                rx8900_time_regs_block_t trigger_time;
+
+                load_triggertime_from_EEPROM( &trigger_time );
+
+                where_has_the_time_gone_mode(&trigger_time);
+
+                __builtin_unreachable();
+
+            } else {    // if ( load_trigger_flag_from_EEPROM() == 0x01 )
+
+                // RTC not set and trigger never pulled
+
+                // (New old stock?)
+
+                // Ok, we do not know what time it is but we have not triggered yet. This is a hard case.
+                // We could start up and use a relative time to mark the trigger, but then we are
+                // hosed if the RTC ever depowers. I don't want a TSL that does not know what
+                // time it is to look just like one that does since this is a latent and
+                // invisible defect.
+
+                // "Late To The Party Mode"
+
+                late_to_the_party_mode();
+
+                __builtin_unreachable();
+
+            }  // if ( load_trigger_flag_from_EEPROM() == 0x01 )
+
+             __builtin_unreachable();
+
+        } else {        // if ( load_start_flag_from_EEPROM() != 0x00 )
+
+            // We have a good start_time in the EEPROM that has not been set yet
 
             /// This is our first startup at the factory! Set the time!
 
@@ -1608,209 +1782,141 @@ int main(void)
             load_starttime_from_EEPROM( &now );
             rx8900_time_regs_set( &now );
 
-            // Mark that we used the starttime so we don't try to reuse it
+            // Mark that we used the start_time so we don't try to reuse it
             #warning uncomment this
             //save_start_flag_to_EEPROM( 0x01 );
 
-            // Show clock time a long as pin is out for double check it got set right and is running
 
-            while ( 1 || !triggerPinPresent() ) {
-
-                rx8900_time_regs_get( &now );
-                showClockTime( &now );
-                sleep_cpu();
-
-            }
-
-            _delay_ms(100);         // Debounce the pin
-
-        }
-
-        reset_flag = 1;
+        } // if (load_start_flag_from_EEPROM() == 0x00 )
 
     }
 
+    // If we get here, then we know that the RTC has the correct time set
 
-    /*
+    rx8900_time_regs_block_t time_trigger_reg_block;
 
-    // First time power up set the clock from the block stored
-    // in the eeprom for us by the factory programmer
+    // Have we ever been triggered?
 
-    rx8900_time_regs_block_t time_regs;
+    if ( load_trigger_flag_from_EEPROM() == 0x01 ) {
 
-    load_time_regs_from_EEPROM( EEPROM_ADDRESS_STARTIME , &time_regs );
+        // Load the trigger_time from EEPROM
 
-    rx8900_time_regs_set( &time_regs );
-
-    */
-
-
-    _delay_ms(10);           // Give that a second to warm up
-
-
-
-    // When we get here, the LCD is working and we have a 1Hz signal coming from the RTC
-    // that will wake us up from low power sleep.
-
-    /*
-    rx8900_time_regs_block_t time_regs;
-
-    load_time_regs_from_EEPROM( EEPROM_ADDRESS_STARTIME , &time_regs );
-
-    rx8900_time_regs_set( &time_regs );
-
-    */
-
-    batteryemptyblink();
-    //clock();
-
-    // Read (or reread if this was a cold start) current time from RX8900. Since we started at 00:00:00 1/1/00, we can figure out
-    // what our current count is
-    // at least for the first 100 years....
-
-    // While the reread is superfluous, I'm leaving it in so at least if there is a problem with the initial RTC time set
-    // then we will know about it now rather than in 80 years when the person goes to change the battery.
-
-
-
-    // Grab the Flags before we clear them in the next step.
-    // Mostly we care about the low voltage flag that tells us if the RTC is already running
-    // or this is a initial power up.
-
-    if (reset_flag) {
-
+        load_triggertime_from_EEPROM( &time_trigger_reg_block );
 
     } else {
 
-        if (!rx8900_check_magic() ) {
+        // We are trigger virgins!
 
-            showNowD( 888888 );
+        // Before we continue to "Ready to Launch mode", we need the pin to be in so that it can be pulled out. so
+        // show clock time a long as pin is out for double check it got set right and is running
 
-        } else {
+        rx8900_time_regs_block_t now;
 
-            showNowD( 111111 );
+        uint8_t blink_toggle;
+
+        while ( !triggerPinPresent() ) {
+
+            // Blink the colons to indicate clock mode
+
+            blink_toggle = !blink_toggle;
+
+            if ( blink_toggle ) {
+
+                colonLOn();
+                colonROn();
+
+            }
+
+            rx8900_time_regs_get( &now );
+            showClockTime( &now );
+            sleep_cpu();
+
+            colonLOff();
+            colonROff();
 
         }
 
+        _delay_ms(100);         // Debounce the pin
 
-    }
+        // if we get here, we know we have never been triggered and the pin is armed and ready
 
+        // "Ready to Launch mode"
 
+        while ( triggerPinPresent() ) {
 
-    show_time_for_testing();
+            // Show a nice pattern until the pin is pulled that shows we are ready
 
-    triggerPinDisable();
+            // TODO: Check for low battery in here?
 
-    #warning
-    //USI_TWI_Master_disable();       // Done talking to RTC?
-
-    // No updates power testing.
-    // Baseline             : 5.1uA @ 3.5V
-    // TWI pullups disabled : 5.2uA @ 3.5V
-    // sei()                : 5.2uA @ 3.5V
-
-    sei();
-
-    // EEPROM Power Reduction Mode and disable unused flash bank - supposedly lowers power but does not show in testing
-
-    //NVM.CTRLB = NVM_EPRM_bm | NVM_FPRM_bm;
-
-    while (1) {
-
-        sleep_cpu();
-
-    }
+            figure8PatternUntilReleased();
 
 
-    triggerPinDisable();
+        }
 
-    // Here we have sleep mode all set up, and the 1Hz FOUT from the RTC set to generate an interrupt
-    // to wake us.
+        // Show time! Trigger pin pulled!
 
-    sei();
-
-    //TESTING
-    digitPatternUntilPressed();
-    figure8PatternUntilReleased();
-
-/*
-
-    // Drop clock to 1mhz for fcc part 15 exemption
-    // This increases power ~0.2uA
-    CCP = CCP_IOREG_gc; //Trigger protection mechanism
-    CLK.PSCTRL = CLK_PSADIV0_bm;             // Switch system clock /2
-
-
-
-    while (0) {
-        // Output pattern on pin 4 to check sys clock freq
-        PINTOP_OUT();
-        while (1) {
-            PINTOP_UP();
-            PINTOP_DOWN();
-        };
-    }
-
-*/
-
-    //powerTest();
-
-
-
-    // For now, you can hold the trigger pin down while inserting the battery to simulate a fresh power-up
-
-    if ( triggerPinPresent() || reset_flag ) {
-
-        // LV flag means that the RTC saw a low voltage, so values may not be accurate
-
-        // We are new to the world (or our batteries were out too long)
-
-        // For now we will just go into wait-for-trigger mode
-        // TODO: If we are just manufactured, then set local clock to UTC. Otherwise display a sad message telling people to return unit.
-
-
-        // Show "ready to load" counting pattern until trigger pin is pushed in
-
-        // Show a marching countdown pattern until pin pressed...
-        // TOOD: we will load UTC time during this step
-
-        digitPatternUntilPressed();
+        // Clear the display for instant feed back!
 
         clearLCD();
 
-        _delay_ms(100);     // Debounce switch
+        // Grab the current time!
 
-        // PRESSED - ARMED AND READY!
+        rx8900_time_regs_block_t trigger_time;
 
-        figure8PatternUntilReleased();
+        rx8900_time_regs_get( &trigger_time );
 
-        // Ok! We are live now, people!
+        rx8900_time_regs_set( &trigger_time );      // Set back the current time.
+                                                    // This has the effect of restarting the current second
+                                                    // so we are counting up from the exact sub-second moment that the pin was pulled.
 
-
-        // Save this moment so we do not forget it ever.
-
-        saveCurrentTimeFromRX8900ToEEPROM();
-
-        // start counter
+        save_triggertime_to_EEPROM( &trigger_time );    // Save the time we triggered forever
+        save_trigger_flag_to_EEPROM( 0x01 );            // Set the flag so we know that trigger_time in EEPROM is valid
 
 
-
-        // Throw a 00000 000000 up on the screen while we flash so there is instant feedback that we started.
-        showNowD( 0 );
-        showNowHMSx( 0 );
+        // Flash bulbs!!!
 
         flash();
+
+
+    }
+
+    // When we get here, we know that the RTC has a good time and trigger_time is set
+    // Now we have to figure out what the display count looks like by subtracting the
+    // time_trigger from the time_now to get the time_since_lanuch
+
+
+    time_count_t time_trigger;
+
+    rx8900_time_regs_to_count( &time_trigger , &time_trigger_reg_block );
+
+
+    rx8900_time_regs_block_t time_now_reg_block;
+
+    rx8900_time_regs_get( & time_now_reg_block );
+
+    time_count_t time_now;
+
+    rx8900_time_regs_to_count( &time_now , &time_now_reg_block );
+
+
+    time_count_t time_since_lanuch;
+
+    if ( time_count_subtract( &time_since_lanuch , &time_now , &time_trigger ) ) {
+
+        // The trigger time is in the future! Error!
+
+        impossible_future_mode();
+
+        __builtin_unreachable();
 
     }
 
 
-    // Read (or reread if this was a cold start) current time from RX8900. Since we started at 00:00:00 1/1/00, we can figure out
-    // what our current count is
-    // at least for the first 100 years....
+    // We are ready to start counting! See you in 30 years!
 
-    // While the reread is superfluous, I'm leaving it in so at least if there is a problem with the initial RTC time set
-    // then we will know about it now rather than in 80 years when the person goes to change the battery.
+    // time_since_lanch has our count ready for us.
 
+    run( time_since_lanuch.d , time_since_lanuch.h , time_since_lanuch.m , time_since_lanuch.s );
 
 }
 

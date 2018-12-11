@@ -83,6 +83,8 @@ const uint8_t lcd_font[] = {
     SEG_A | SEG_E | SEG_C | SEG_D | SEG_F | SEG_G ,         // 9
 };
 
+uint8_t lcd_font_char_dash = { SEG_G };         // '-'
+    
 
 // Map LCD seg pins to MCU seg pins (set by PCB layout)
 
@@ -275,115 +277,6 @@ const lcd_visible_segment  digitmap[][7] = {
 };
 
 
-// Battery icon
-// Level = 0-3
-// Level 0 is the outline
-
-// Just happens to work out that the different level indicators are on coresponding COM lines on the same SEG
-
-void battSegOn( uint8_t level) {
-    lcd_set_pixel( level ,  LCD_SEG_L01 );
-
-}
-
-void battSegOff(uint8_t level) {
-    lcd_clear_pixel( level ,  LCD_SEG_L01 );
-}
-
-
-// Colons between 4th and 5th digit on each module
-
-void colonLOn() {
-    lcd_set_pixel( LCD_COM_L4 ,  LCD_SEG_L05 );
-
-}
-
-void colonLOff() {
-    lcd_clear_pixel( LCD_COM_L4,  LCD_SEG_L05 );
-}
-
-
-void colonROn() {
-    lcd_set_pixel( LCD_COM_R4 ,  LCD_SEG_R05 );
-
-}
-
-void colonROff() {
-    lcd_clear_pixel( LCD_COM_R4,  LCD_SEG_R05 );
-}
-
-
-// decimal points between 2th and 3th digit on each module
-
-void decimalLOn() {
-    lcd_set_pixel( LCD_COM_L4 ,  LCD_SEG_L09 );
-}
-
-void decimalLOff() {
-    lcd_clear_pixel( LCD_COM_L4,  LCD_SEG_L09 );
-}
-
-
-void decimalROn() {
-    lcd_set_pixel( LCD_COM_R4 ,  LCD_SEG_R09 );
-
-}
-
-void decimalROff() {
-    lcd_clear_pixel( LCD_COM_R4,  LCD_SEG_R09 );
-}
-
-
-
-void spinOn( uint8_t d,  uint8_t step ) {
-
-    //LCD_MEM_REG( 3 , 19 ) |=  LCD_MEM_BIT( 3 , 19 );
-
-    //LCDDR0 |= LCD_MEM_BIT( digitmap[0][step].seg ,  digitmap[0][step].com );
-
-    lcd_set_pixel( digitmap[d][step].com ,  digitmap[d][step].seg );
-
-}
-
-void spinOff( uint8_t d,  uint8_t step ) {
-
-    lcd_clear_pixel( digitmap[d][step].com ,  digitmap[d][step].seg );
-
-}
-
-static const uint8_t figureEightSteps[] = {
-    SEG_A, SEG_B , SEG_G , SEG_E , SEG_D , SEG_C , SEG_G , SEG_F
-};
-
-void figure8On( uint8_t d,  uint8_t s ) {
-
-    uint8_t segementBit = figureEightSteps[s];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBit ) {
-
-            lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-
-        }
-    }
-}
-
-
-void figure8Off( uint8_t d,  uint8_t s ) {
-
-    uint8_t segementBit = figureEightSteps[s];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBit ) {
-
-            lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-        }
-    }
-}
-
-
 
 void digitShow( uint8_t d,  uint8_t n ) {
 
@@ -396,7 +289,9 @@ void digitShow( uint8_t d,  uint8_t n ) {
             lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
 
         } else {
+            
             lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+            
         }
     }
 }
@@ -415,6 +310,26 @@ void digitOn( uint8_t d,  uint8_t n ) {
         }
     }
 }
+
+
+void segmentsOn( uint8_t segementBitsInThisDigit,  uint8_t d ) {
+
+
+    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
+
+        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
+
+            lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+
+        }
+    }
+}
+
+void showDash(uint8_t n ) {
+    
+    segmentsOn( lcd_font_char_dash , n ); 
+    
+}    
 
 
 void digitOff( uint8_t d,  uint8_t n ) {
@@ -555,3 +470,130 @@ void displaydigit02F() {
     }
 }
 
+
+
+// Battery icon
+// Level = 0-3
+// Level 0 is the outline
+
+// Just happens to work out that the different level indicators are on coresponding COM lines on the same SEG
+
+void battSegOn( uint8_t level) {
+    lcd_set_pixel( level ,  LCD_SEG_L01 );
+
+}
+
+void battSegOff(uint8_t level) {
+    lcd_clear_pixel( level ,  LCD_SEG_L01 );
+}
+
+
+// Colons between 4th and 5th digit on each module
+
+void colonLOn() {
+    lcd_set_pixel( LCD_COM_L4 ,  LCD_SEG_L05 );
+
+}
+
+void colonLOff() {
+    lcd_clear_pixel( LCD_COM_L4,  LCD_SEG_L05 );
+}
+
+
+void colonROn() {
+    lcd_set_pixel( LCD_COM_R4 ,  LCD_SEG_R05 );
+
+}
+
+void colonROff() {
+    lcd_clear_pixel( LCD_COM_R4,  LCD_SEG_R05 );
+}
+
+
+// decimal points between 2th and 3th digit on each module
+
+void decimalLOn() {
+    lcd_set_pixel( LCD_COM_L4 ,  LCD_SEG_L09 );
+}
+
+void decimalLOff() {
+    lcd_clear_pixel( LCD_COM_L4,  LCD_SEG_L09 );
+}
+
+
+void decimalROn() {
+    lcd_set_pixel( LCD_COM_R4 ,  LCD_SEG_R09 );
+
+}
+
+void decimalROff() {
+    lcd_clear_pixel( LCD_COM_R4,  LCD_SEG_R09 );
+}
+
+
+
+void spinOn( uint8_t d,  uint8_t step ) {
+
+    //LCD_MEM_REG( 3 , 19 ) |=  LCD_MEM_BIT( 3 , 19 );
+
+    //LCDDR0 |= LCD_MEM_BIT( digitmap[0][step].seg ,  digitmap[0][step].com );
+
+    lcd_set_pixel( digitmap[d][step].com ,  digitmap[d][step].seg );
+
+}
+
+void spinOff( uint8_t d,  uint8_t step ) {
+
+    lcd_clear_pixel( digitmap[d][step].com ,  digitmap[d][step].seg );
+
+}
+
+static const uint8_t figureEightSteps[] = {
+    SEG_A, SEG_B , SEG_G , SEG_E , SEG_D , SEG_C , SEG_G , SEG_F
+};
+
+void figure8On( uint8_t d,  uint8_t s ) {
+
+    uint8_t segementBit = figureEightSteps[s];
+
+    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
+
+        if ( ( 1 << seg ) & segementBit ) {
+
+            lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+
+        }
+    }
+}
+
+
+void figure8Off( uint8_t d,  uint8_t s ) {
+
+    uint8_t segementBit = figureEightSteps[s];
+
+    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
+
+        if ( ( 1 << seg ) & segementBit ) {
+
+            lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
+        }
+    }
+}
+
+
+
+/*
+ Bit 1 – SEGON: Segments “ON”.
+ Writing this bit to one enables all segments and the contents of the Display Memory is output on the LCD. Writing it to
+ zero, turns “OFF” all LCD segments.
+ This bit can be used to flash the LCD, leaving the LCD timing generator enabled
+ 
+ */
+
+void lcd_blank() {
+    LCD.CTRLA |= LCD_SEGON_bm;
+}
+
+void lcd_unblank() {
+    LCD.CTRLA &= ~LCD_SEGON_bm;    
+}        

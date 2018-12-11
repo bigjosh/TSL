@@ -9,6 +9,8 @@
 #ifndef LCD_H_
 #define LCD_H_
 
+#define LCD_DIGITS  12      // 6 per module * 2 modules
+
 // Maximum number of common lines.
 #define LCD_MAX_NR_OF_COM  4
 // Maximum number of segment lines.
@@ -77,6 +79,9 @@ void displaydigit02O();
 void displaydigit01F();
 void displaydigit02F();
 
+// Chars
+
+void showDash(uint8_t n );      // '-'
 
 // Battery icon
 // Level = 0-3
@@ -107,6 +112,13 @@ void decimalLOff();
 void decimalROn();
 
 void decimalROff();
+
+// Quickly blink the whole LCD
+
+void lcd_blank();
+
+void lcd_unblank();
+
 
 
 #endif /* LCD_H_ */
