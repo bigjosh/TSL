@@ -581,13 +581,6 @@ inline uint8_t testPin3Grounded() {
 
 }
 
-void triggerPinDisable() {
-
-    PORTC_INT0MASK &= ~PIN7_bm;                            // Disable interrupt
-    PORTC.PIN7CTRL = PORT_ISC_INPUT_DISABLE_gc;            // Disable pull-up on trigger pin, disable input buffer
-
-}
-
 // Enable the pin on the XMEGA that gets the FOUT signal from the RX8900 and generates an interrupt to wake us once per second
 
 void FOUT_in_pin_enable() {
@@ -628,9 +621,13 @@ void triggerPinEnable() {
     PORTC_INT0MASK |= PIN7_bm;
 }
 
+// Turn off interrupt, disable input buffer
 
-void triggerPinInit() {
-    triggerPinEnable();
+void triggerPinDisable() {
+
+    PORTC_INT0MASK &= ~PIN7_bm;                            // Disable interrupt
+    PORTC.PIN7CTRL = PORT_ISC_INPUT_DISABLE_gc;            // Disable pull-up on trigger pin, disable input buffer
+
 }
 
 inline uint8_t triggerPinPresent() {
@@ -880,9 +877,8 @@ uint24_t rx8900_getDate() {
 }
 
 
-#define RX8900_FLAG_LV_BM (1<<1)       // The chip saw a low voltage so might have lost time/data
-#define RX8900_FLAG_NT_BM (1<<0)       // Voltage is too low for temp compensation
-
+#define RX8900_FLAG_VLF_BM  (1<<1)       // The chip saw a low voltage so might have lost time/data (1.8V)
+#define RX8900_FLAG_VDET_BM (1<<0)       // Voltage is too low for temp compensation (2.4V)
 
 const uint8_t magicregs[] = {
     'T' ,      // RAM
@@ -946,7 +942,7 @@ uint8_t rx8900_check_low_voltage() {
 
     USI_TWI_Read_Data( RX8900_TWI_ADDRESS , RX8900_FLAG_REG , &save_flags_reg , 1 );
 
-    return (save_flags_reg & RX8900_FLAG_LV_BM);
+    return (save_flags_reg & RX8900_FLAG_VLF_BM);
 
 }
 
@@ -960,7 +956,7 @@ uint8_t rx8900_check__voltage_24() {
 
     USI_TWI_Read_Data( RX8900_TWI_ADDRESS , RX8900_FLAG_REG , &save_flags_reg , 1 );
 
-    return (save_flags_reg & RX8900_FLAG_LV_BM);
+    return (save_flags_reg & RX8900_FLAG_VLF_BM);
 
 }
 
@@ -1386,20 +1382,6 @@ void figure8PatternUntilReleased() {
 
 }
 
-// Sets the RTC based on the time stored in the first 8 bytes of EEPROM
-
-void rx8900_set_from_eeprom() {
-
-
-}
-
-// Read out the current time from the RX8900 registers and save it to XMEGA EEPROM
-
-void saveCurrentTimeFromRX8900ToEEPROM() {
-    // TODO: This
-
-}
-
 // Check if RX8900 considers 00 as a leap year
 
 void leaptester() {
@@ -1539,7 +1521,7 @@ void batteryemptyblink() {
     };
 }
 
-void blink_forever() {
+void blink_lcd_forever() {
     while (1) {
 
         lcd_blank();
@@ -1559,7 +1541,7 @@ void impossible_future_mode() {
     showNowD( 888888 );
     showNowHMSx( 777777 );
 
-    blink_forever();
+    blink_lcd_forever();
 
     __builtin_unreachable();
 }
@@ -1577,7 +1559,7 @@ void where_has_the_time_gone_mode( rx8900_time_regs_block_t *trigger_time ) {
     // Show the trigger time blinking forever.
     // To fix this, they will need to reprogram the current time into this unit
 
-    blink_forever();
+    blink_lcd_forever();
 
     __builtin_unreachable();
 
@@ -1599,7 +1581,7 @@ void late_to_the_party_mode() {
 
     }
 
-    blink_forever();
+    blink_lcd_forever();
 
     __builtin_unreachable();
 
@@ -1617,7 +1599,9 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
     uint8_t st = s/10;          // seconds tens place
     uint8_t so = s - (st*10);   // seconds ones place
 
-    while (d<1000000 && !rx8900_check_low_voltage() ) {
+    while (d<1000000 ) {
+
+        // TODO: Check battery voltage here
 
         showNowD( d );
 
@@ -1660,8 +1644,6 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 }
 
 
-
-
 int main(void)
 {
 
@@ -1673,6 +1655,8 @@ int main(void)
     //enable_rtc_32Kxtal();     // There is provision to install this on the PCB. Saves 0.3uA over ULP. Worth the savings for the extra part?
 
     disableUnusedIOPins();      // Save a little power by disdabling the input buffers on all unused pins
+
+    triggerPinDisable();        // Dsiable the input buffer on the trigger pin until we actually need it.
 
     USI_TWI_Master_Initialise();        // Init TWI pins to pullup.
 
@@ -1695,8 +1679,6 @@ int main(void)
 
     initFlash();            // Enable output on the pins that control the transistors that flash the flash LEDs
 
-    triggerPinInit();       // Enable pullup and interrupts on trigger pin
-
     output1onFOEpin();      // Enable the 1Hz output from the RTC via its Frequency Output Enable pin
 
 
@@ -1716,7 +1698,7 @@ int main(void)
                             // "Please perform initial setting only tSTA (oscillation start time), when the
                             // built-in oscillation is stable."
 
-   
+
     #warning testing
     if ( 1 ||rx8900_check_low_voltage() ) {
 
@@ -1814,6 +1796,10 @@ int main(void)
 
         uint8_t blink_toggle;
 
+        triggerPinEnable();                 // Enable the pull-up, input buffer, adn the interrupt
+                                            // The interrupt wakes us from sleep the moment the pin is pulled
+                                            // so there is not a lag until the next second.
+
         while ( !triggerPinPresent() ) {
 
             // Blink the colons to indicate clock mode
@@ -1872,6 +1858,9 @@ int main(void)
         save_triggertime_to_EEPROM( &trigger_time );    // Save the time we triggered forever
         save_trigger_flag_to_EEPROM( 0x01 );            // Set the flag so we know that trigger_time in EEPROM is valid
 
+        triggerPinDisable();                        // Disable interrupt, pull-up, and input buffer to save power
+                                                    // Really important becuase the pull-up would be shorted to ground anytime the pin was back in
+                                                    // and the input buffer is going to float without a pull-up.
 
         // Flash bulbs!!!
 
