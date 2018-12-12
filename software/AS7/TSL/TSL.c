@@ -1070,11 +1070,33 @@ static void rx8900_time_regs_reset( rx8900_time_regs_block_t *rx8900_time_regs_b
 
 }
 
-// Load from chip
 
-static void rx8900_time_regs_get( rx8900_time_regs_block_t *rx8900_time_regs_block ) {
-    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0x00 , rx8900_time_regs_block->time_regs, 8 );
-}
+
+/*
+
+Century interlock explained:
+
+The RX8900 only saves 2 digits for the year, so when we roll from 2099 to 2100, the year will go from 99 to 0.
+This would make us loose 100 years worth of days on the first battery change of the new century when we go to
+compute how long since the pin was pulled.
+
+To buy ourselves extra centuries, we use a century interlock stored in the RAM register of the RX8900.
+When we first program a unit (presumably in the 21st century), we set the interlock to '00' BCD (0x3030).
+
+On every power up (typically due to battery change) every 10 - 30 years(? We'll see!), we check the current year. If it is greater than 50
+and the century interlock is even, then we increment the century interlock. If it is less than 50  and the century
+interlock is odd, then we increment the century interlock. This also has the effect of re-writing the EEPROM every few decades, which may
+or may not extend the retention. https://electronics.stackexchange.com/questions/411616/for-maximum-eeprom-readability-into-the-future-is-it-better-to-write-once-and-le
+
+When we want to compute the total days elapsed since epoch Jan 1, 2000 then we just divide the century interlock by
+2 and drop the remainder. We when multiply this by the number of days in an RX8900 century and we will get the correct value.
+
+This will get us an additional 127 centuries of run time, which puts us at the year 14700. We will need to patch the firmware before
+then if we want to continue to keep accurate count.
+
+*/
+
+
 
 
 // Save to chip
@@ -1083,14 +1105,41 @@ static void rx8900_time_regs_set( const rx8900_time_regs_block_t *rx8900_time_re
     USI_TWI_Write_Data( RX8900_TWI_ADDRESS , 0x00 , rx8900_time_regs_block->time_regs, 8 );
 }
 
+
+// Load from chip
+
+static void rx8900_time_regs_get( rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+    USI_TWI_Read_Data( RX8900_TWI_ADDRESS , 0x00 , rx8900_time_regs_block->time_regs, 8 );
+}
+
+
+
+// Load from chip, update century interlock if necessary
+
+static void rx8900_time_regs_get_and_update_century_interlock( rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+
+        rx8900_time_regs_get( rx8900_time_regs_block );
+
+    uint8_t y = bcd2c( rx8900_time_regs_block->time_regs[6] );
+    uint8_t i = bcd2c( rx8900_time_regs_block->time_regs[7] );     // Century interlock flag
+
+    if (
+        (y >=50 && !( i & 0x01 )) // If the year is 50-99 and the interlock is currently even...
+        ||                        // ...or...
+        ( y<50  &&  ( i & 0x01 )) // If the year is 00-49 and the interlock is currently odd...
+    ) {
+        // Increment the century interlock and write back to eeprom
+        i++;
+        rx8900_time_regs_block->time_regs[7] = c2bcd( i );
+        rx8900_time_regs_set( rx8900_time_regs_block );         // Here we rewrite the whole block. Maybe this will extend retention because we are refreshing the cells?
+    }
+
+}
+
+
 /*
 
     Layout of EEPROM:
-
-    Bytes   0-7: Start_time.  rx8900_time_regs_block_t set by factory to GMT time of initial programming
-    Bytes  8-15: Trigger_time. Set to the current time the moment the trigger is pulled.
-    Byte     16: Start_flag.  0=Never been started, 1=Been started. Set to 1 on initial power up when we copy the start time to the RTC.
-    Byte     17: Trigger_flag 0=Never been triggered. Set to 1 when trigger pin pulled.Trigger_time fields also set then
 
 */
 
@@ -1098,10 +1147,11 @@ static void rx8900_time_regs_set( const rx8900_time_regs_block_t *rx8900_time_re
 
 #define EEPROM_ADDRESS(x) (( void *) x )
 
-#define EEPROM_ADDRESS_STARTIME     EEPROM_ADDRESS( 0)           // Set by the at the Factory to real time GMT when initially programmed
-#define EEPROM_ADDRESS_TRIGGERTIME  EEPROM_ADDRESS( 8)           // Set by the RTC when the trigger pin is pulled
-#define EEPROM_ADDRESS_STARTFLAG    EEPROM_ADDRESS( 9)           // Set 0x00 to indicate that STARTTIME block has time in it, set to 0x01 when STARTTIME set to the RTC the first time we power up
-#define EEPROM_ADDRESS_TRIGGERFLAG  EEPROM_ADDRESS(10)           // Set when the trigger pin is pulled and the RTC time is aves to the TRIGGER_TIME block
+#define EEPROM_ADDRESS_STARTIME     EEPROM_ADDRESS( 0)  // Set by the at the Factory to real time GMT when initially programmed. RX8900 register block layout. Values are BCD.
+#define EEPROM_ADDRESS_STARTFLAG    EEPROM_ADDRESS( 8)  // Set 0x00 to indicate that STARTTIME block has time in it, set to 0x01 when STARTTIME set to the RTC the first time we power up
+
+#define EEPROM_ADDRESS_TRIGGERTIME  EEPROM_ADDRESS(10)  // Set to RTC time when the trigger pin is pulled. RX8900 register block layout. Values are BCD.
+#define EEPROM_ADDRESS_TRIGGERFLAG  EEPROM_ADDRESS(18)  // Set to 0x01 when the trigger pin is pulled and the RTC time is aves to the TRIGGER_TIME block
 
 
 static void load_time_regs_from_EEPROM( void *eeprom_start_address , rx8900_time_regs_block_t *rx8900_time_regs_block ) {
@@ -1161,29 +1211,6 @@ static uint8_t load_trigger_flag_from_EEPROM() {
 }
 
 
-
-/*
-
-    Century interlock explained:
-
-    The RX8900 only save 2 digits for the year, so when we roll from 2099 to 2100, the year will go from 99 to 0.
-    This would make us loose 100 years worth of days on the first battery change of the new century when we go to
-    compute how long since the pin was pulled.
-
-    To buy ourselves an extra 100 years (till 2200), we use a century interlock stored in the RAM register of the RX8900.
-    When we first program a unit (presumably in the 1st half of the 2000 century), we set the interlock to 0.
-
-    On every battery change (every 10 - 30 years? We'll see!), we check the current year. If it is greater than 50
-    and the century interlock is even, then we increment the century interlock. If it is less than 50  and the century
-    interlock is odd, then we increment the century interlock.
-
-    When we want to compute the total days elapsed since epoch Jan 1, 2000 then we just divide the century interlock by
-    2 and drop the remainder. We when multiply this by the number of days in an RX8900 century and we will get the correct value.
-
-    This will get us an additional 127 centuries of run time, which puts us at the year 14700. We will need to patch the firmware before
-    then if we want to continue to keep accurate count.
-
-*/
 
 
 // Convert to days since Midnight Jan 1, 2000
@@ -1272,7 +1299,7 @@ static uint8_t time_count_subtract( time_count_t *difference , time_count_t *min
 
     uint8_t borrowed_days =0;
 
-    if ( (subtrahend->h + borrowed_minutes ) > minuend->h ) {
+    if ( (subtrahend->h + borrowed_hours ) > minuend->h ) {
 
         minuend->h += 24;
 
@@ -1534,17 +1561,6 @@ void blink_lcd_forever() {
     __builtin_unreachable();
 }
 
-// Somehow trigger time > now time?
-
-void impossible_future_mode() {
-
-    showNowD( 888888 );
-    showNowHMSx( 777777 );
-
-    blink_lcd_forever();
-
-    __builtin_unreachable();
-}
 
 // We powered up to find that we have been triggered previously, but the RTC does not know what time it is
 // This is because either the battery went so dead that the RTC stopped, or the batteries we removed too long
@@ -1571,19 +1587,40 @@ void where_has_the_time_gone_mode( rx8900_time_regs_block_t *trigger_time ) {
 // then there would be no way to get the count back if they ever had a flat or missing battery event again
 // after they pulled the trigger.
 
-void late_to_the_party_mode() {
+void clockErrorMode() {
 
-    // Show "------ ------"
-
-    for(uint8_t n=0; n<LCD_DIGITS; n++ ) {
-
-        showDash( n );
-
-    }
+    // Show "cLoc Error"
+    showClocError();
 
     blink_lcd_forever();
 
     __builtin_unreachable();
+
+}
+
+// We powered up to find that our trigger time was in the future!
+// Something is screwy. Maybe corruption? We need to see the unit.
+
+void eepromErrorMode( uint8_t code ) {
+
+    // Show "EEPro error"
+    showEEProError( code );
+
+    blink_lcd_forever();
+
+    __builtin_unreachable();
+
+}
+
+// Show "------ ------"
+
+void showDashes() {
+
+    for(uint8_t d=0; d<12 ; d++ ) {
+
+        showDash(d);
+
+    }
 
 }
 
@@ -1694,13 +1731,15 @@ int main(void)
     sei();                  // Note that all our ISR are empty, we only use interrupts to wake from sleep.
     // TODO: FInd a way to stop ISR from running
 
-    _delay_ms(3000);        // tSTA RX8900 oscillator stabilization time 3s max
+    showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
+
+    _delay_ms(1000);        // tSTA RX8900 oscillator stabilization time 1s max at 25C
                             // "Please perform initial setting only tSTA (oscillation start time), when the
                             // built-in oscillation is stable."
 
+    clearLCD();
 
-    #warning testing
-    if ( 1 ||rx8900_check_low_voltage() ) {
+    if ( rx8900_check_low_voltage() ) {
 
         // We have seen a low voltage, so we need to set the rx8900
         rx8900_init();
@@ -1708,12 +1747,12 @@ int main(void)
         // Clear the low voltage flag
         rx8900_clear_voltage_flags();
 
-        if ( 1 || load_start_flag_from_EEPROM() != 0x00 ) {      // 0x00 indicates that the start block has the current time and we have not set it yet.
+        if ( load_start_flag_from_EEPROM() != 0x00 ) {      // 0x00 indicates that the start block has the current time and we have not set it yet.
 
             // The RTC is not set, but this is not the first time we are starting.
 
             // Oh no! We just started up with low voltage on the RTC and it is not the initial start!
-            // We do not know what time it is now! Bo place good to go from here.
+            // We do not know what time it is now! No place good to go from here.
 
             if ( load_trigger_flag_from_EEPROM() == 0x01 ) {
 
@@ -1745,7 +1784,7 @@ int main(void)
 
                 // "Late To The Party Mode"
 
-                late_to_the_party_mode();
+                clockErrorMode();
 
                 __builtin_unreachable();
 
@@ -1757,7 +1796,18 @@ int main(void)
 
             // We have a good start_time in the EEPROM that has not been set yet
 
-            /// This is our first startup at the factory! Set the time!
+            if (load_trigger_flag_from_EEPROM() == 0x01 ) {
+
+                // Hmmm.... We seem to have triggered even though we are in factory startup?
+                // This is wonky
+
+                eepromErrorMode(1);
+
+                __builtin_unreachable();
+
+            }
+
+            /// This is our first startup at the factory! Set the current time into the RTC!
 
             rx8900_time_regs_block_t now;
 
@@ -1765,8 +1815,7 @@ int main(void)
             rx8900_time_regs_set( &now );
 
             // Mark that we used the start_time so we don't try to reuse it
-            #warning uncomment this
-            //save_start_flag_to_EEPROM( 0x01 );
+            save_start_flag_to_EEPROM( 0x01 );
 
 
         } // if (load_start_flag_from_EEPROM() == 0x00 )
@@ -1784,6 +1833,8 @@ int main(void)
         // Load the trigger_time from EEPROM
 
         load_triggertime_from_EEPROM( &time_trigger_reg_block );
+
+        // Fall though to normal run mode below...
 
     } else {
 
@@ -1813,7 +1864,7 @@ int main(void)
 
             }
 
-            rx8900_time_regs_get( &now );
+            rx8900_time_regs_get_and_update_century_interlock( &now );
             showClockTime( &now );
             sleep_cpu();
 
@@ -1839,13 +1890,13 @@ int main(void)
 
         }
 
-        // Show time! Trigger pin pulled!
+        // Trigger pin pulled!
 
         // Clear the display for instant feed back!
 
         clearLCD();
 
-        // Grab the current time!
+        // Grab the current time from RTC!
 
         rx8900_time_regs_block_t trigger_time;
 
@@ -1873,33 +1924,30 @@ int main(void)
     // Now we have to figure out what the display count looks like by subtracting the
     // time_trigger from the time_now to get the time_since_lanuch
 
-
     time_count_t time_trigger;
 
     rx8900_time_regs_to_count( &time_trigger , &time_trigger_reg_block );
 
 
     rx8900_time_regs_block_t time_now_reg_block;
-
-    rx8900_time_regs_get( & time_now_reg_block );
+    rx8900_time_regs_get_and_update_century_interlock( &time_now_reg_block );       // This will the century interlock and save back to EEPROM if nessisary
 
     time_count_t time_now;
-
     rx8900_time_regs_to_count( &time_now , &time_now_reg_block );
 
 
     time_count_t time_since_lanuch;
-
     if ( time_count_subtract( &time_since_lanuch , &time_now , &time_trigger ) ) {
 
         // The trigger time is in the future! Error!
+        // This should only ever happen if there was an EEPROM corruption or someone is
+        // messing with the EEPROM data
 
-        impossible_future_mode();
+        eepromErrorMode(2);
 
         __builtin_unreachable();
 
     }
-
 
     // We are ready to start counting! See you in 30 years!
 

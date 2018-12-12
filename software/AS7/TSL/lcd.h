@@ -49,7 +49,7 @@ void spinOff( uint8_t d, uint8_t step );
 
 // Darken the segments in digit d (leftmost is 0) to display the number n
 
-void digitOn( uint8_t d,  uint8_t n );
+void digitOn(  uint8_t n , uint8_t d );
 
 // Undarken the segments in digit d (leftmost is 0) to undisplay the number n
 
@@ -82,6 +82,13 @@ void displaydigit02F();
 // Chars
 
 void showDash(uint8_t n );      // '-'
+
+void showClocError();                 // "cloc   Error"
+void showEEProError(uint8_t code);    // "EEProX  Error" where X is a single digit error code
+void showc2018JOSH();                 // "c2018   JOSH"
+
+
+
 
 // Battery icon
 // Level = 0-3

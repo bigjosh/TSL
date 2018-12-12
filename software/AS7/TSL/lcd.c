@@ -83,8 +83,19 @@ const uint8_t lcd_font[] = {
     SEG_A | SEG_E | SEG_C | SEG_D | SEG_F | SEG_G ,         // 9
 };
 
-uint8_t lcd_font_char_dash = { SEG_G };         // '-'
-    
+uint8_t lcd_font_char_dash = { SEG_G };                                 // '-'
+uint8_t lcd_font_char_c    = { SEG_G | SEG_B | SEG_A };                 // c
+uint8_t lcd_font_char_L    = { SEG_C | SEG_B | SEG_A };                 // L
+uint8_t lcd_font_char_o    = { SEG_G | SEG_B | SEG_A | SEG_F };         // o
+uint8_t lcd_font_char_E    = { SEG_D | SEG_C | SEG_G | SEG_B | SEG_A }; // E
+uint8_t lcd_font_char_r    = { SEG_B | SEG_G };                         // r
+uint8_t lcd_font_char_P    = { SEG_E | SEG_D | SEG_C | SEG_G | SEG_B }; // P
+
+uint8_t lcd_font_char_J    = { SEG_B | SEG_A | SEG_F | SEG_F | SEG_E }; // J
+uint8_t lcd_font_char_O    = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F | SEG_E }; // O
+uint8_t lcd_font_char_S    = { SEG_D | SEG_C | SEG_G | SEG_F | SEG_A }; // S
+uint8_t lcd_font_char_H    = { SEG_B | SEG_C | SEG_F | SEG_G | SEG_E }; // H
+
 
 // Map LCD seg pins to MCU seg pins (set by PCB layout)
 
@@ -289,15 +300,15 @@ void digitShow( uint8_t d,  uint8_t n ) {
             lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
 
         } else {
-            
+
             lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-            
+
         }
     }
 }
 
 
-void digitOn( uint8_t d,  uint8_t n ) {
+void digitOn(  uint8_t n , uint8_t d ) {
 
     uint8_t segementBitsInThisDigit = lcd_font[ n ];
 
@@ -326,10 +337,54 @@ void segmentsOn( uint8_t segementBitsInThisDigit,  uint8_t d ) {
 }
 
 void showDash(uint8_t n ) {
-    
-    segmentsOn( lcd_font_char_dash , n ); 
-    
-}    
+
+    segmentsOn( lcd_font_char_dash , n );
+
+}
+
+void showClocError() {
+    segmentsOn( lcd_font_char_c , 11 );
+    segmentsOn( lcd_font_char_L , 10 );
+    segmentsOn( lcd_font_char_o ,  9 );
+    segmentsOn( lcd_font_char_c ,  8 );
+
+    segmentsOn( lcd_font_char_E , 5 );
+    segmentsOn( lcd_font_char_r , 4 );
+    segmentsOn( lcd_font_char_r , 3 );
+    segmentsOn( lcd_font_char_o , 2 );
+    segmentsOn( lcd_font_char_r , 1 );
+}
+
+
+void showEEProError( uint8_t code ) {
+    segmentsOn( lcd_font_char_E , 11 );
+    segmentsOn( lcd_font_char_E , 10 );
+    segmentsOn( lcd_font_char_P ,  9 );
+    segmentsOn( lcd_font_char_r ,  8 );
+    segmentsOn( lcd_font_char_o ,  7 );
+    digitOn(  code , 6 );
+
+    segmentsOn( lcd_font_char_E , 5 );
+    segmentsOn( lcd_font_char_r , 4 );
+    segmentsOn( lcd_font_char_r , 3 );
+    segmentsOn( lcd_font_char_o , 2 );
+    segmentsOn( lcd_font_char_r , 1 );
+}
+
+
+void showc2018JOSH() {
+
+    segmentsOn(  lcd_font_char_c , 11 );
+    digitOn(  2 ,10 );
+    digitOn(  0 , 9 );
+    digitOn(  1 , 8 );
+    digitOn(  8 , 7 );
+
+    segmentsOn( lcd_font_char_J , 5 );
+    segmentsOn( lcd_font_char_O , 4 );
+    segmentsOn( lcd_font_char_S , 3 );
+    segmentsOn( lcd_font_char_H , 2 );
+}
 
 
 void digitOff( uint8_t d,  uint8_t n ) {
@@ -587,7 +642,7 @@ void figure8Off( uint8_t d,  uint8_t s ) {
  Writing this bit to one enables all segments and the contents of the Display Memory is output on the LCD. Writing it to
  zero, turns “OFF” all LCD segments.
  This bit can be used to flash the LCD, leaving the LCD timing generator enabled
- 
+
  */
 
 void lcd_blank() {
@@ -595,5 +650,5 @@ void lcd_blank() {
 }
 
 void lcd_unblank() {
-    LCD.CTRLA &= ~LCD_SEGON_bm;    
-}        
+    LCD.CTRLA &= ~LCD_SEGON_bm;
+}
