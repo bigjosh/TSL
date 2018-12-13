@@ -1699,12 +1699,15 @@ void eepromErrorMode( uint8_t code ) {
 
 }
 
-// Blink "999999 999999" forevermore
+// Blink "999999 235959" forevermore
+// Prevents unscrupulous sellers from trying to
+// pass offr TSLs that have rolled over as less used
+// than they really are.
 
 void longNowMode() {
 
     showNowMDY( 99 , 99 , 99);
-    showNowHMS( 99 , 99 , 99);
+    showNowHMS( 23 , 59 , 59);
 
     blink_lcd_forever();
 
@@ -1842,7 +1845,7 @@ int main(void)
 
 
     sei();                  // Note that all our ISR are empty, we only use interrupts to wake from sleep.
-    
+
     // TODO: Find a way to stop ISR from running to save the power easted in all those pushes and pops
 
 
