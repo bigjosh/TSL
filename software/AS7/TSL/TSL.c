@@ -1051,7 +1051,6 @@ static uint8_t daysInMonth( uint8_t m , uint8_t y) {
 
     }
 
-    eepromErrorMode( 6 );           // We got a month that was not 1-12!
     __builtin_unreachable();
 
 }
@@ -1843,12 +1842,9 @@ int main(void)
 
 
     sei();                  // Note that all our ISR are empty, we only use interrupts to wake from sleep.
-    // TODO: FInd a way to stop ISR from running
+    
+    // TODO: Find a way to stop ISR from running to save the power easted in all those pushes and pops
 
-    #warning test
-
-    showNowD( rx8900_date_to_days(0 , 67, 3, 2 ) );
-    while (1);
 
     showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
 
