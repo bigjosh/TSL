@@ -86,7 +86,7 @@ void showDash(uint8_t n );      // '-'
 void showClocError();                 // "cloc   Error"
 void showEEProError(uint8_t code);    // "EEProX  Error" where X is a single digit error code
 void showc2018JOSH();                 // "c2018   JOSH"
-
+void showNoTrig();                    // "no TriG"
 
 
 

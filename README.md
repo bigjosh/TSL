@@ -67,17 +67,16 @@ compute how long since the pin was pulled.
 To buy ourselves extra centuries, we use a century interlock stored in the RAM register of the RX8900.
 When we first program a unit (presumably in the 1st half of the 2000 century), we set the interlock to '00' BCD (0x3030).
 
-On every power up (typically due to battery change) every 10 - 30 years(? We'll see!), we check the current year. If it is greater than 50
-and the century interlock is even, then we increment the century interlock. If it is less than 50  and the century
-interlock is odd, then we increment the century interlock. This also has the effect of re-writing the EEPROM every few decades, which [may or may not extend the retention](https://electronics.stackexchange.com/questions/411616/for-maximum-eeprom-readability-into-the-future-is-it-better-to-write-once-and-le). 
+On every power up (typically due to battery change) every 10 - 30 years(? We'll see!), we check the current year. If it is greater than 50 and the century interlock is even, then we increment the century interlock. If it is less than 50  and the century interlock is odd, then we increment the century interlock. This also has the effect of re-writing the EEPROM every few decades, which [may or may not extend the retention](https://electronics.stackexchange.com/questions/411616/for-maximum-eeprom-readability-into-the-future-is-it-better-to-write-once-and-le). 
 
 
-When we want to compute the total days elapsed since epoch Jan 1, 2000 then we divide the century interlock by
-2 and drop the remainder. We when multiply this by the number of days in an RX8900 century and we will get the correct value.
+When we want to compute the total days elapsed since epoch Jan 1, 2000 then we divide the century interlock by 2 and drop the remainder. We when multiply this by the number of days in an RX8900 century and we will get the correct value.
 
-This will get us an additional 127 centuries of run time, which puts us at the year 14700. We will need to patch the firmware before
-then if we want to continue to keep accurate count.
+This will get us an additional 127 centuries of run time, which puts us at the year 14700. We will need to patch the firmware before then if we want to continue to keep accurate count.
 
+Note that in real life, 2100 is not a leap year even though the RX8900 will count it as one. This means that if a unit is programmed in the 2000's and triggered on 3/1/2100 then the trigger date in EEPROM will be 2/29/2100, and any day after that will be 1 day behind the actual calendar date when the trigger was pulled. The count will still always be right, and the only way you'd know about this is if you inspect the trigger time with the diagnostic mode.
+
+Why don't we just correct for this? Well because as far as the RX8900 is concerned 2/29/2100 actually happened, so a trigger could happen on that day.   
 
 ## Method of Operation
 
@@ -128,19 +127,6 @@ We enter this mode on power up if the trigger pin has never been pulled before, 
 ### Time Since Launch Mode
 
 
-
-### EEPROM Error Mode
-
-Shows `EEProX Error` blinking forever
-
-This is shown on start-up if the EEPROM is in an inconsistent state.
-
-If `X` is `1`, then the trigger pin was already showing as pulled, even though the time had never been factory set. 
-
-If `X` is `2`, then the time the trigger happened is in the future. 
-
-Neither of these should ever happen unless there is an EEPROM corruption or people are messing with bits. 
-
 ### Where Has the Time Gone mode
 
 Shows the time the trigger pin was pulled in MMDDYY HHMMSS blinking at 0.5Hz. 
@@ -154,6 +140,92 @@ Shows `cLoc Error` blinking forever.
 Indicates that the trigger pin has never been pulled, and that the real time was lost so now needs the real time to be set before we can go to Ready To Launch mode.    
 
 ### Low Battery mode
+
+### Long Now mode
+
+Shows `999999 999999` blinking forevermore. 
+
+Indicates that the trigger was more than 1 million days (~2740 years) ago so we can not display it accurately. 
+
+
+### EEPROM Error Mode
+
+Shows `EEPro ErrorX` blinking forever.
+
+This is shown on start-up if the EEPROM is in an inconsistent state. This usually means either that the EEPROM was never programmed (it defaults to 0xff), or it got corrupted somehow. 
+
+The `X` after `EEPro` is a code that tells you the first problem found (they are checked in order). 
+
+| Code | Reason 
+| - | - |
+| 1 | Invalid LOW VOLTAGE flag |
+| 2 | Invalid START flag |
+| 3 | Invalid TRIGGER flag |
+| 4 | TRIGGER flag set but START flag not set |
+| 5 | TRIGGER time is before START time |  
+
+#### Codes 1-3
+
+All flags must have a value of either 0 (not set) or 1 (set). If not, then an invalid flag EEPRo Error will come up.
+
+#### Code 4
+
+How could the user have pulled the trigger if we never set the start time? Impossible. 
+
+#### Code 5
+
+To find the Time Since Launch, we need to subtract the START time from the TRIGGER time, so the TRIGGER time must be after the START time. 
+
+#### Code 6
+
+We encountered a month that was not 1-12. Use diagnostics to see which one.  
+
+#### Code 7 
+
+Start time failed validity checks on start up. (i.e. month was greater than 12)
+
+#### Code 8 
+
+Trigger time failed validity checks on start up. (i.e. month was greater than 12)
+
+
+
+## Diagnostics
+
+### Factory program
+
+On the initial power-up after the time as been set to the value supplied in the start_time EEPROM block, the display will show the current time for as long as the pin is out. 
+
+This is handy for verifying the correct time was programmed. 
+
+### Field service 
+
+There are two test pins on the 6-pin ISP connector on the board. They are labeled `B` and `T`. They are internally pull-ed up, so you connected the to the ground pin (labeled `G`) to activate them.
+
+They are only tested at startup. You can force a start up by grounding the RESET pin (labeled `C`). After you RESET, you have the 1 second warmup to then ground one of the test pins.
+
+#### `B` Pin
+
+Grounding the `B` pin will show the current time as loaded from the RTC on the display. This will show even if the clock has not been initialized. 
+
+The right `:` is lit to differentiate this mode.
+
+Left decimal point means low voltage flag set in RX8900 right now.
+
+Right decimal point means low voltage flag set in EEPROM (we have seen a low voltage on RX8900 in the past). Once set, the low voltage flag in EEPROM stays set forever once set. 
+
+The low voltage flag indicates that the voltage to the RTC dropped low enough that the RTC at least stopped counting, and possibly lost all the values in the time registers.
+
+The EEPROM flag is set after this diagnostic screen, so you can see the RTC showing low voltage but the EEPROM flag not set if this is the first time we are powering up since the low voltage event happened on the RTC.  
+
+The low voltage flag is cleared in the RX8900 when it is programmed with the start time at the factory. 
+   
+
+#### `T` Pin
+
+Grounding the `T` pin will show the stored trigger time. This will show even if the trigger has not happened. The left `:` is lit to differentiate this mode.
+
+The display will show "no TriG" if the EEPROM trigger flag is not set.   
 
 ## Build notes
 

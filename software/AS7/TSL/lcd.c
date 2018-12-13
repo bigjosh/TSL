@@ -96,6 +96,12 @@ uint8_t lcd_font_char_O    = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F | SEG_E }; 
 uint8_t lcd_font_char_S    = { SEG_D | SEG_C | SEG_G | SEG_F | SEG_A }; // S
 uint8_t lcd_font_char_H    = { SEG_B | SEG_C | SEG_F | SEG_G | SEG_E }; // H
 
+uint8_t lcd_font_char_n    = { SEG_B | SEG_G | SEG_F };                 // n
+uint8_t lcd_font_char_T    = { SEG_D | SEG_C | SEG_B };                 // T
+uint8_t lcd_font_char_i    = { SEG_B };                                 // i
+uint8_t lcd_font_char_G    = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F  }; // G
+
+
 
 // Map LCD seg pins to MCU seg pins (set by PCB layout)
 
@@ -342,6 +348,18 @@ void showDash(uint8_t n ) {
 
 }
 
+void showNoTrig() {
+    segmentsOn( lcd_font_char_n , 11 );
+    segmentsOn( lcd_font_char_o , 10 );
+
+    segmentsOn( lcd_font_char_T , 5 );
+    segmentsOn( lcd_font_char_r , 4 );
+    segmentsOn( lcd_font_char_i , 3 );
+    segmentsOn( lcd_font_char_G , 2 );
+
+
+}
+
 void showClocError() {
     segmentsOn( lcd_font_char_c , 11 );
     segmentsOn( lcd_font_char_L , 10 );
@@ -362,13 +380,14 @@ void showEEProError( uint8_t code ) {
     segmentsOn( lcd_font_char_P ,  9 );
     segmentsOn( lcd_font_char_r ,  8 );
     segmentsOn( lcd_font_char_o ,  7 );
-    digitOn(  code , 6 );
 
     segmentsOn( lcd_font_char_E , 5 );
     segmentsOn( lcd_font_char_r , 4 );
     segmentsOn( lcd_font_char_r , 3 );
     segmentsOn( lcd_font_char_o , 2 );
     segmentsOn( lcd_font_char_r , 1 );
+    digitOn(  code , 0 );
+
 }
 
 

@@ -566,6 +566,9 @@ inline void showNowH(  uint8_t h ) {
 
 }
 
+// Test pins are label T & B on the ISP6 connector
+// They are pulled up internally
+
 void initTestPins() {
 
     // These appear on ISP pins 3 & 4 respectively
@@ -575,9 +578,16 @@ void initTestPins() {
 }
 
 
-inline uint8_t testPin3Grounded() {
+inline uint8_t testPinBGrounded() {
 
     return ( ! (PORTC.IN & _BV(2) ));
+
+}
+
+
+inline uint8_t testPinTGrounded() {
+
+    return ( ! (PORTC.IN & _BV(3) ));
 
 }
 
@@ -881,11 +891,20 @@ uint24_t rx8900_getDate() {
 #define RX8900_FLAG_VDET_BM (1<<0)       // Voltage is too low for temp compensation (2.4V)
 
 const uint8_t magicregs[] = {
-    'T' ,      // RAM
-    's' ,      // MIN Alarm
-    'L' ,      // HOUR Alarm
-    '3' ,      // DAY Alarm
+    'T' ,      // MIN Alarm
+    's' ,      // HOUR Alarm
+    'L' ,      // DAY Alarm
+    '3' ,      // Week Alarm
 };
+
+/*
+
+    We use the alarm regs to store a magic value that we can check to see if registers are still good.
+
+    "If an alarm function is not used, registers 08h-0Ah can be used as RAM. ( AIE : "0" )"
+
+*/
+
 
 void rx8900_set_magic() {
 
@@ -996,13 +1015,48 @@ void makeDaysSoFarTable(void) {
 */
 
 
-// If month is jan (1), then no days other than the days in this month.
-// If month is mar (3), then there have been 59 days so far plus what every day of the month it is now.
-// First 00000 is just becuase month starts at 1
-// DOES NOT COUNT LEAP DAYS - these are computed seporately
 // This table of days per month came from the RX8900 datasheet page 9
 
-static const unsigned int daysSoFarByMonth[] = { 0,0,31,59,90,120,151,181,212,243,273,304,334 };
+static uint8_t daysInMonth( uint8_t m , uint8_t y) {
+
+    switch ( m ) {
+
+        case  1:
+        case  3:
+        case  5:
+        case  7:
+        case  8:
+        case 10:
+        case 12:    // Interestingly, we will never hit 12. See why?
+                    return 31 ;
+
+        case  4:
+        case  6:
+        case  9:
+        case 11:
+                    return 30 ;
+
+        case  2:
+
+                    if ( y % 4 == 0 ) {         // "A leap year is set whenever the year value is a multiple of four (such as 04, 08, 12, 88, 92, or 96)."
+                                                // Empirical testing also shows that 00 is a leap year to the RX8900
+                                                // https://electronics.stackexchange.com/questions/385952/does-the-epson-rx8900-real-time-clock-count-the-year-00-as-a-leap-year
+
+                        return 29 ;             // "February in leap year 01, 02, 03 ... 28, 29, 01
+
+                    } else {
+
+                        return 28;              // February in normal year 01, 02, 03 ... 28, 01, 02
+                    }
+
+    }
+
+    eepromErrorMode( 6 );           // We got a month that was not 1-12!
+    __builtin_unreachable();
+
+}
+
+static const uint32_t rx8900_days_per_century = ( 100UL * 365 ) + 25;       // 25 leap years in every RX8900 century
 
 // Convert the y/m/d values from the RX8900 to a count of the number of days since 00/1/1
 // rx8900_date_to_days( 0 , 1, 1 ) = 0
@@ -1010,35 +1064,42 @@ static const unsigned int daysSoFarByMonth[] = { 0,0,31,59,90,120,151,181,212,24
 // rx8900_date_to_days( 0 , 2, 1 ) = 31
 // rx8900_date_to_days( 1 , 1, 1 ) = 366 (00 is a leap year!)
 
-static uint32_t rx8900_date_to_days( uint8_t y , uint8_t m, uint8_t d ) {
+static uint32_t rx8900_date_to_days( uint8_t c , uint8_t y , uint8_t m, uint8_t d ) {
 
-    uint24_t dayCount=0;
+    uint32_t dayCount=0;
 
-    // Count days in years past (not counting leap years yet)
+    // Count days in centuries past
 
-    dayCount += (uint32_t)y * 365UL;      // 365 days per year past in normal years
+    dayCount += rx8900_days_per_century * c;
 
-    if (y) {   // Don't even look if year is 0
+    // Count days in years past this century
 
-        dayCount += 1;              // Add the extra leap day for year 00, which is past since y>0
+    for( uint8_t y_scan = 0; y_scan < y ; y_scan++ ) {
 
-        dayCount += ((y-1)/4);     // Every 4th year is a leap year, so pick up an extra day for each. -1 because we don't want to count this year yet.
+        if ( y_scan % 4 == 0 ) {
+            // leap year every 4 years on RX8900
+            dayCount += 366UL;      // 366 days per year past in leap years
 
-    }
+        } else {
 
-    if ( (y%4) == 0) {  // Is this a leap year?
-
-        if (m>2) {      // Past feb 29th this year?
-
-            dayCount++;        // Count the extra leap day
-
+            dayCount += 365UL;      // 365 days per year past in normal years
         }
 
     }
 
-    dayCount += daysSoFarByMonth[ m ];          // Days until the 1st day of this month
 
-    dayCount += (d-1);                          // On the 1st of the month, there are no days yet so -1
+    // Now accumulate the days in months past so far this year
+
+    for( uint8_t m_scan = 1; m_scan < m ; m_scan++ ) {      // Don't count current month
+
+        dayCount += daysInMonth( m_scan , y );       // Year is needed to count leap day in feb in leap years.
+
+
+    }
+
+    // Now include the passed days so far this month
+
+    dayCount += (uint32_t) d-1;     // 1st day of a month is 1, so if it is the 1st of the month then no days has elapsed this month yet.
 
     return dayCount;
 
@@ -1153,6 +1214,8 @@ static void rx8900_time_regs_get_and_update_century_interlock( rx8900_time_regs_
 #define EEPROM_ADDRESS_TRIGGERTIME  EEPROM_ADDRESS(10)  // Set to RTC time when the trigger pin is pulled. RX8900 register block layout. Values are BCD.
 #define EEPROM_ADDRESS_TRIGGERFLAG  EEPROM_ADDRESS(18)  // Set to 0x01 when the trigger pin is pulled and the RTC time is aves to the TRIGGER_TIME block
 
+#define EEPROM_ADDRESS_LOWVOLTFLAG  EEPROM_ADDRESS(20)  // Set to 0x01 if we ever power up and find a low voltage condition.
+
 
 static void load_time_regs_from_EEPROM( void *eeprom_start_address , rx8900_time_regs_block_t *rx8900_time_regs_block ) {
 
@@ -1194,8 +1257,10 @@ static void save_triggertime_to_EEPROM( const rx8900_time_regs_block_t *rx8900_t
 
 
 
+
+
 static void save_start_flag_to_EEPROM() {
-    eeprom_write_byte( EEPROM_ADDRESS_STARTFLAG , 1 );
+    eeprom_write_byte( EEPROM_ADDRESS_STARTFLAG , 0x01 );
 }
 
 static uint8_t load_start_flag_from_EEPROM() {
@@ -1203,31 +1268,40 @@ static uint8_t load_start_flag_from_EEPROM() {
 }
 
 static void save_trigger_flag_to_EEPROM() {
-    eeprom_write_byte( EEPROM_ADDRESS_TRIGGERFLAG , 1 );
+    eeprom_write_byte( EEPROM_ADDRESS_TRIGGERFLAG , 0x01 );
 }
 
 static uint8_t load_trigger_flag_from_EEPROM() {
-    return eeprom_read_byte( EEPROM_ADDRESS_TRIGGERFLAG );
+    return eeprom_read_byte( EEPROM_ADDRESS_TRIGGERFLAG  );
 }
 
+static void save_low_voltage_flag_to_EEPROM() {
+    eeprom_write_byte( EEPROM_ADDRESS_LOWVOLTFLAG , 0x01 );
+}
+
+static uint8_t load_low_voltage_flag_from_EEPROM() {
+    return eeprom_read_byte( EEPROM_ADDRESS_LOWVOLTFLAG );
+}
 
 
 
 // Convert to days since Midnight Jan 1, 2000
 // including the century interlock
 
+// Relies on both the data sheet's description of days per month and also
+// empirical testing of leap years on century turns.
+// https://electronics.stackexchange.com/questions/385952/does-the-epson-rx8900-real-time-clock-count-the-year-00-as-a-leap-year
+
 static uint32_t rx8900_time_regs_days_since_epoch( rx8900_time_regs_block_t *rx8900_time_regs_block ) {
 
-    uint8_t d = bcd2c( rx8900_time_regs_block->time_regs[4] );
-    uint8_t o = bcd2c( rx8900_time_regs_block->time_regs[5] );     // Month
-    uint8_t y = bcd2c( rx8900_time_regs_block->time_regs[6] );
+    uint8_t d = bcd2c( rx8900_time_regs_block->time_regs[4] );     // DD
+    uint8_t o = bcd2c( rx8900_time_regs_block->time_regs[5] );     // MM
+    uint8_t y = bcd2c( rx8900_time_regs_block->time_regs[6] );     // YY
     uint8_t i = bcd2c( rx8900_time_regs_block->time_regs[7] );     // Century interlock flag
 
-    uint8_t c = i / 2;
+    uint8_t c = i / 2;              // Interlock clicks twice per century.
 
-    uint32_t days_in_previous_centuries= c *  ( 365UL * 100UL ) + ( (100UL / 4UL ) );        // (365 days/year * 100 years) + ( 100 years * ( 1 leap day / 4 years ) )
-
-    return rx8900_date_to_days( y , o , d ) + days_in_previous_centuries;
+    return rx8900_date_to_days( c , y , o , d );
 
 }
 
@@ -1255,6 +1329,47 @@ typedef struct {
     uint32_t d;
 
 } time_count_t;
+
+
+// Returns 1 if all regs are in bounds,
+// 0 if an error
+
+uint8_t rx8900_time_regs_valid( rx8900_time_regs_block_t *rx8900_time_regs_block ) {
+
+    uint8_t y = bcd2c( rx8900_time_regs_block->time_regs[6] );     // YY
+
+    if ( y > 99 ) return 0;
+
+    uint8_t o = bcd2c( rx8900_time_regs_block->time_regs[5] );     // MM
+
+    if ( o <1 || o > 12 ) return 0;
+
+    uint8_t d = bcd2c( rx8900_time_regs_block->time_regs[4] );     // DD
+
+    if ( d < 1 || d > daysInMonth( o , y ) ) return 0;
+
+    uint8_t i = bcd2c( rx8900_time_regs_block->time_regs[7] );     // Century interlock flag
+
+    // This can't really be invalid, just just sanity check to make sure we are in the right millenniums
+
+    if ( i > 20 ) return 0;
+
+
+    uint8_t s = bcd2c( rx8900_time_regs_block->time_regs[0] );
+
+    if (s>59) return 0;
+
+    uint8_t m = bcd2c( rx8900_time_regs_block->time_regs[1] );
+
+    if (m>59) return 0;
+
+    uint8_t h = bcd2c( rx8900_time_regs_block->time_regs[2] );
+
+    if (h>23) return 0;
+
+    return 1;
+
+}
 
 
 void rx8900_time_regs_to_count( time_count_t *count , rx8900_time_regs_block_t *rx8900_time_regs_block ) {
@@ -1413,7 +1528,6 @@ void figure8PatternUntilReleased() {
 
 void leaptester() {
 
-
     rx8900_init();
 
     rx8900_setDate( 0  , 2 , 28 );
@@ -1457,32 +1571,6 @@ void contrastTest() {
 
 }
 
-// Just a standardized run to measure power usage that should be close to real usage in run mode.
-
-void powerTest() {
-
-    // LOW POWER TEST CODE
-    // Meant to simulate a normal count
-
-    PINTOP_OUT();
-
-    triggerPinDisable();
-
-    while (1) {
-        PINTOP_UP();
-        displaydigit02F();
-        displaydigit01O();
-        PINTOP_DOWN();
-        sleep_cpu();
-        //_delay_ms(1000);
-        displaydigit01F();
-        displaydigit02O();
-        sleep_cpu();
-    }
-
-}
-
-
 // Look like a normal clock
 // Read current time from RTC and show on the display
 // INdicates clock time with blinking decimal point on left module and colon on right module
@@ -1496,6 +1584,7 @@ static void showClockTime( rx8900_time_regs_block_t *time_now ) {
     uint8_t d  = bcd2c( time_now->time_regs[4] );
     uint8_t o  = bcd2c( time_now->time_regs[5] );
     uint8_t y  = bcd2c( time_now->time_regs[6] );
+    // TODO: Hmmm... We should really show the century interlock somehow...
 
     showNowMDY( o , d , y );
     showNowHMS( h , m , s );
@@ -1598,13 +1687,25 @@ void clockErrorMode() {
 
 }
 
-// We powered up to find that our trigger time was in the future!
-// Something is screwy. Maybe corruption? We need to see the unit.
+// Something in EEPROM is screwy. Maybe corruption? We need to see the unit.
 
 void eepromErrorMode( uint8_t code ) {
 
     // Show "EEPro error"
     showEEProError( code );
+
+    blink_lcd_forever();
+
+    __builtin_unreachable();
+
+}
+
+// Blink "999999 999999" forevermore
+
+void longNowMode() {
+
+    showNowMDY( 99 , 99 , 99);
+    showNowHMS( 99 , 99 , 99);
 
     blink_lcd_forever();
 
@@ -1676,6 +1777,19 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
         }               // h
         h=0;
         d++;
+
+        if ( (d & 0x7f) == 0x00 ) {     // Every 128 days....
+
+            clearLCD();
+            showc2018JOSH();            // Show copyright egg
+
+            sleep_cpu();                // Show for 1 second
+            clearLCD();
+
+            so++;                       // Account for this second
+
+        }
+
     }                   // d
 
 }
@@ -1691,9 +1805,9 @@ int main(void)
 
     //enable_rtc_32Kxtal();     // There is provision to install this on the PCB. Saves 0.3uA over ULP. Worth the savings for the extra part?
 
-    disableUnusedIOPins();      // Save a little power by disdabling the input buffers on all unused pins
+    disableUnusedIOPins();      // Save a little power by disabling the input buffers on all unused pins
 
-    triggerPinDisable();        // Dsiable the input buffer on the trigger pin until we actually need it.
+    triggerPinDisable();        // Disable the input buffer on the trigger pin until we actually need it.
 
     USI_TWI_Master_Initialise();        // Init TWI pins to pullup.
 
@@ -1731,6 +1845,11 @@ int main(void)
     sei();                  // Note that all our ISR are empty, we only use interrupts to wake from sleep.
     // TODO: FInd a way to stop ISR from running
 
+    #warning test
+
+    showNowD( rx8900_date_to_days(0 , 67, 3, 2 ) );
+    while (1);
+
     showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
 
     _delay_ms(1000);        // tSTA RX8900 oscillator stabilization time 1s max at 25C
@@ -1739,101 +1858,215 @@ int main(void)
 
     clearLCD();
 
-    if ( rx8900_check_low_voltage() ) {
+    // Diagnostic functions
 
-        // We have seen a low voltage, so we need to set the rx8900
-        rx8900_init();
+    while (testPinBGrounded()) {
 
-        // Clear the low voltage flag
-        rx8900_clear_voltage_flags();
+        // Test pin B will show the current time in the RTC - even if it has not been set or reset yet
+        // Right colon indicates RTC time
+        // Left decimal point means low voltage flag set in RX8900
+        // Right decimal point means low voltage flag set in EEPROM (we have seen a low voltage on RX8900 in the past)
 
-        if ( load_start_flag_from_EEPROM() != 0x00 ) {      // 0x00 indicates that the start block has the current time and we have not set it yet.
+        if ( rx8900_check_low_voltage()  ) {
+            decimalLOn();
+        }
 
-            // The RTC is not set, but this is not the first time we are starting.
+        if ( load_low_voltage_flag_from_EEPROM() != 0x00 ) {
+            decimalROn();
+        }
 
-            // Oh no! We just started up with low voltage on the RTC and it is not the initial start!
-            // We do not know what time it is now! No place good to go from here.
+        rx8900_time_regs_block_t time_now_reg_block;
 
-            if ( load_trigger_flag_from_EEPROM() == 0x01 ) {
+        colonROn();
+        rx8900_time_regs_get( &time_now_reg_block );
+        showClockTime( &time_now_reg_block );
+        sleep_cpu();
 
-                // We have triggered.
+        clearLCD();
 
-                // We have already triggered! There is not much we can do here except tell the user that we know
-                // when they triggered, but can not show a count.  Hopefully they will get the current time programmed
-                // back into the RTC and revive their count!
-
-                rx8900_time_regs_block_t trigger_time;
-
-                load_triggertime_from_EEPROM( &trigger_time );
-
-                where_has_the_time_gone_mode(&trigger_time);
-
-                __builtin_unreachable();
-
-            } else {    // if ( load_trigger_flag_from_EEPROM() == 0x01 )
-
-                // RTC not set and trigger never pulled
-
-                // (New old stock?)
-
-                // Ok, we do not know what time it is but we have not triggered yet. This is a hard case.
-                // We could start up and use a relative time to mark the trigger, but then we are
-                // hosed if the RTC ever depowers. I don't want a TSL that does not know what
-                // time it is to look just like one that does since this is a latent and
-                // invisible defect.
-
-                // "Late To The Party Mode"
-
-                clockErrorMode();
-
-                __builtin_unreachable();
-
-            }  // if ( load_trigger_flag_from_EEPROM() == 0x01 )
-
-             __builtin_unreachable();
-
-        } else {        // if ( load_start_flag_from_EEPROM() != 0x00 )
-
-            // We have a good start_time in the EEPROM that has not been set yet
-
-            if (load_trigger_flag_from_EEPROM() == 0x01 ) {
-
-                // Hmmm.... We seem to have triggered even though we are in factory startup?
-                // This is wonky
-
-                eepromErrorMode(1);
-
-                __builtin_unreachable();
-
-            }
-
-            /// This is our first startup at the factory! Set the current time into the RTC!
-
-            rx8900_time_regs_block_t now;
-
-            load_starttime_from_EEPROM( &now );
-            rx8900_time_regs_set( &now );
-
-            // Mark that we used the start_time so we don't try to reuse it
-            save_start_flag_to_EEPROM( 0x01 );
-
-
-        } // if (load_start_flag_from_EEPROM() == 0x00 )
+        // Next show the days since midnight 2000
+        time_count_t time_now;
+        rx8900_time_regs_to_count( &time_now , &time_now_reg_block );
+        showNowD( time_now.d );
+        sleep_cpu();
+        clearLCD();
 
     }
 
-    // If we get here, then we know that the RTC has the correct time set
+    while (testPinTGrounded()) {
+
+        // Test pin T will show the current trigger time - even if it has not been set yet
+        // Left colon indicates trigger time
+        // Right decimal point means trigger has been pulled
+
+        if ( load_trigger_flag_from_EEPROM() ) {
+
+            rx8900_time_regs_block_t trigger_time_reg_block;
+
+            load_triggertime_from_EEPROM( &trigger_time_reg_block );
+            colonLOn();
+            showClockTime( &trigger_time_reg_block );
+            sleep_cpu();
+            clearLCD();
+
+            // Next show the days since midnight 2000
+
+            time_count_t time_trigger;
+            rx8900_time_regs_to_count( &time_trigger, &trigger_time_reg_block );
+            showNowD( time_trigger.d );
+            sleep_cpu();
+            clearLCD();
+
+        } else {
+
+            showNoTrig();
+            sleep_cpu();
+            clearLCD();
+
+        }
+
+    }
+
+
+    // Sanity check EEPROM flags
+    // Flags must all be either 0 or 1
+
+    if ( load_low_voltage_flag_from_EEPROM() > 0x01 ) {
+        eepromErrorMode( 1 );
+        __builtin_unreachable();
+    }
+
+    if ( load_start_flag_from_EEPROM() > 0x01 ) {
+        eepromErrorMode( 2 );
+        __builtin_unreachable();
+    }
+
+    if ( load_trigger_flag_from_EEPROM() > 0x01 ) {
+        eepromErrorMode( 3 );
+        __builtin_unreachable();
+    }
+
+
+    if ( ! load_start_flag_from_EEPROM() ) {      // We have never set the RTC time.
+
+        // This is our first power up in the factory. We need to init the RTC and set the current time
+
+        if (load_trigger_flag_from_EEPROM() ) {
+
+            // Hmmm.... We seem to have triggered even though we are in factory startup?
+            // This is wonky
+
+            eepromErrorMode(4);
+
+            __builtin_unreachable();
+
+        }
+
+        // We have seen a low voltage, so we need to set up the rx8900
+        rx8900_init();
+
+        // Clear the low voltage flag from our initial powerup
+        rx8900_clear_voltage_flags();
+
+        /// This is our first startup at the factory! Set the current time into the RTC!
+
+        rx8900_time_regs_block_t now;
+
+        load_starttime_from_EEPROM( &now );
+
+        if (!rx8900_time_regs_valid( &now ) ) {
+
+            eepromErrorMode( 7 );
+
+        }
+
+        rx8900_time_regs_set( &now );
+
+        //rx8900_set_magic();     // As a backup plan, also store our secret magic in the unused alarm registers
+        // so we can check later
+
+        // Mark that we used the start_time so we don't try to reuse it
+        save_start_flag_to_EEPROM();
+
+    } // if (load_start_flag_from_EEPROM() == 0x00 )
+
+
+    // Do we have a low voltage condition now?
+
+    if ( rx8900_check_low_voltage() ) {
+
+        // Permanently remember this since we now do not know what time it is ever again
+        save_low_voltage_flag_to_EEPROM();
+
+        // Don't bother clearing the low voltage because the time is gone forever (or until
+        // reset at factory) so nothing we can do about it now
+
+    }
+
+    if (load_low_voltage_flag_from_EEPROM() ) {
+
+        // Oh no! RTC time was lost! We do not know what time it is!
+        // We do not know what time it is now! No place good to go from here.
+
+        if ( load_trigger_flag_from_EEPROM() ) {
+
+            // We have triggered.
+
+            // We have already triggered! There is not much we can do here except tell the user that we know
+            // when they triggered, but can not show a count.  Hopefully they will get the current time programmed
+            // back into the RTC and revive their count!
+
+            rx8900_time_regs_block_t trigger_time;
+
+            load_triggertime_from_EEPROM( &trigger_time );
+
+            where_has_the_time_gone_mode(&trigger_time);
+
+            __builtin_unreachable();
+
+        } else {    // if ( !load_trigger_flag_from_EEPROM() )
+
+            // RTC not set and trigger never pulled
+
+            // (New old stock?)
+
+            // Ok, we do not know what time it is but we have not triggered yet. This is a hard case.
+            // We could start up and use a relative time to mark the trigger, but then we are
+            // hosed if the RTC ever de-powers. I don't want a TSL that does not know what
+            // time it is to look just like one that does since this is a latent and
+            // invisible defect.
+
+            // "cloc Error Mode"
+
+            clockErrorMode();
+
+            __builtin_unreachable();
+
+        }  // if ( load_trigger_flag_from_EEPROM() )
+
+        __builtin_unreachable();
+
+    }
+
+    // If we get here, then we know that the RTC has the correct time
 
     rx8900_time_regs_block_t time_trigger_reg_block;
 
     // Have we ever been triggered?
 
-    if ( load_trigger_flag_from_EEPROM() == 0x01 ) {
+    if ( load_trigger_flag_from_EEPROM() ) {
+
+        // We have triggered! They just changed the battery!
 
         // Load the trigger_time from EEPROM
 
         load_triggertime_from_EEPROM( &time_trigger_reg_block );
 
+        if (!rx8900_time_regs_valid( &time_trigger_reg_block ) ) {
+
+            eepromErrorMode( 8 );
+
+        }
         // Fall though to normal run mode below...
 
     } else {
@@ -1847,7 +2080,7 @@ int main(void)
 
         uint8_t blink_toggle;
 
-        triggerPinEnable();                 // Enable the pull-up, input buffer, adn the interrupt
+        triggerPinEnable();                 // Enable the pull-up, input buffer, and the interrupt
                                             // The interrupt wakes us from sleep the moment the pin is pulled
                                             // so there is not a lag until the next second.
 
@@ -1864,7 +2097,7 @@ int main(void)
 
             }
 
-            rx8900_time_regs_get_and_update_century_interlock( &now );
+            rx8900_time_regs_get( &now );
             showClockTime( &now );
             sleep_cpu();
 
@@ -1884,9 +2117,9 @@ int main(void)
             // Show a nice pattern until the pin is pulled that shows we are ready
 
             // TODO: Check for low battery in here?
+            // TODO: Make more power efficient?
 
             figure8PatternUntilReleased();
-
 
         }
 
@@ -1907,16 +2140,19 @@ int main(void)
                                                     // so we are counting up from the exact sub-second moment that the pin was pulled.
 
         save_triggertime_to_EEPROM( &trigger_time );    // Save the time we triggered forever
-        save_trigger_flag_to_EEPROM( 0x01 );            // Set the flag so we know that trigger_time in EEPROM is valid
+        save_trigger_flag_to_EEPROM( );                 // Set the flag so we know that trigger_time in EEPROM is valid
 
         triggerPinDisable();                        // Disable interrupt, pull-up, and input buffer to save power
                                                     // Really important becuase the pull-up would be shorted to ground anytime the pin was back in
                                                     // and the input buffer is going to float without a pull-up.
 
-        // Flash bulbs!!!
+        // Flash bulb party!!!
 
         flash();
 
+        // Note that it is important that this complete within 1 second of the pull
+        // or we will miss a second in our count this pass (it would come back on next battery change)
+        // This deadline is no problem with current flash pattern.
 
     }
 
@@ -1943,7 +2179,7 @@ int main(void)
         // This should only ever happen if there was an EEPROM corruption or someone is
         // messing with the EEPROM data
 
-        eepromErrorMode(2);
+        eepromErrorMode(5);
 
         __builtin_unreachable();
 
@@ -1955,6 +2191,12 @@ int main(void)
 
     run( time_since_lanuch.d , time_since_lanuch.h , time_since_lanuch.m , time_since_lanuch.s );
 
+    // If we get here, then we have been running continuously for 1 million days.
+    // TODO: Have the unit use its recently evolved sentience to add an additional digit to the days display?
+
+    longNowMode();
+
+    __builtin_unreachable();
 }
 
 
