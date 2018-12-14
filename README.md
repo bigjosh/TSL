@@ -180,11 +180,14 @@ The `X` after `EEPro` is a code that tells you the first problem found (they are
 
 | Code | Reason 
 | - | - |
-| 1 | Invalid LOW VOLTAGE flag |
-| 2 | Invalid START flag |
-| 3 | Invalid TRIGGER flag |
-| 4 | TRIGGER flag set but START flag not set |
-| 5 | TRIGGER time is before START time |  
+| 1 | Invalid `LOW VOLTAGE FLAG` |
+| 2 | Invalid `START FLAG` |
+| 3 | Invalid `TRIGGER FLAG` |
+| 4 | `TRIGGER FLAG` set but `START FLAG` not set |
+| 5 | `TRIGGER TIME` is before `START TIME` | 
+| 6 | _[elided]_ |
+| 7 | Invalid `START TIME` | 
+| 7 | Invalid `TRIGGER TIME` | 
 
 #### Codes 1-3
 
@@ -200,7 +203,7 @@ To find the Time Since Launch, we need to subtract the START time from the TRIGG
 
 #### Code 6
 
-We encountered a month that was not 1-12. Use diagnostics to see which one.  
+[elided] 
 
 #### Code 7 
 
@@ -210,7 +213,9 @@ Start time failed validity checks on start up. (i.e. month was greater than 12)
 
 Trigger time failed validity checks on start up. (i.e. month was greater than 12)
 
+## `START TIME` offset
 
+When programming the `START TIME` into the EEPROM, bake sure to account for (1) the time it takes to generate the EEPROM file and program it into the unit, and (2) the 1 second warm up delay when the unit first comes up. 
 
 ## Diagnostics
 
@@ -267,6 +272,12 @@ If the battery datasheets are to be believed, this suggests a runtime of ~66 yea
 
 
 ## Future directions
+
+Add a suplimental pull-up resistor to ~RESET line. In dry conditions it is possible to reset the XMEGA over the built-in pull-up when it is in the tube using static fields. Don't really need this since the firmware is spurious RESET tolerant, but cleaner.   
+
+Add a diode or MOSFET over the RTC so that the RTC backup capacitor can not back feed the XMEGA. This would let us use the RTC built-in voltage detector to drop into backup mode which would reduce drain when batteries are pulled. Don't really need this, but cleaner at the cost of one part.   
+
+If possible find a static LCD and bit bang the segments. Since our batteries have such a flat voltage curve, we could avoid the biasing circuits and charge pump and save a lot of power.  
 
 If the datasheets are to be believed, switching to an ultra low power ARM (like SAM22L or STM32L) or STM8 could reduce power drastically, at the cost of higher cost. This needs to be tested.
 

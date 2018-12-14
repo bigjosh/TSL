@@ -35,7 +35,7 @@
 #include "USI_TWI_Master.h"
 #include <util/delay.h>
 
-#define BIT_TIME_US     (500)          // How long should should we wait between bit transitions?
+#define BIT_TIME_US     (5)          // How long should should we wait between bit transitions?
 
 // These are open collector signals, so never drive high - only drive low or pull high
 
@@ -234,6 +234,36 @@ static void USI_TWI_Stop(void) {
 
     sda_pull_high();            // SDA low to high while SCLK is high is a STOP
     _delay_us(BIT_TIME_US);
+
+}
+
+// Write the bytes pointed to by buffer
+// addr is the chip bus address
+// assumes bus is idle on entry, Exists with bus idle
+// Returns 0 on success
+
+unsigned char USI_TWI_Write_Data_No_stop(unsigned char slave, unsigned char addr , const uint8_t *buffer , uint8_t count)
+{
+
+    USI_TWI_Start( slave , 0 );      // TODO: check for error
+    
+    USI_TWI_Write_Byte( addr );      // select starting register to write to
+    
+
+    // Note here we can't really break out readByte() becuase the last byte
+    // is special since we do not ACK it but instead send a STOP.
+
+    while (count--) {
+
+        USI_TWI_Write_Byte( *buffer );
+
+        buffer++;
+
+    }
+
+    // No stop here. 
+
+    return(0);
 
 }
 

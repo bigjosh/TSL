@@ -39,6 +39,8 @@ unsigned char USI_TWI_Read_Data(unsigned char slave,unsigned char addr, unsigned
 
 unsigned char USI_TWI_Write_Data(unsigned char slave, unsigned char addr, const uint8_t *data , uint8_t size);
 
+unsigned char USI_TWI_Write_Data_No_stop(unsigned char slave, unsigned char addr , const uint8_t *buffer , uint8_t count);
+
 /// float pins and disable input buffers
 
 void USI_TWI_Master_disable( void );
