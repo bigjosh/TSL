@@ -569,7 +569,7 @@ inline void showNowH(  uint8_t h ) {
 // Test pins are label T & B on the ISP6 connector
 // They are pulled up internally
 
-void initTestPins() {
+void initDiagnosticPins() {
 
     // These appear on ISP pins 3 & 4 respectively
 
@@ -603,14 +603,14 @@ void testPinBOut0() {
 
 
 
-inline uint8_t testPinBGrounded() {
+inline uint8_t diagnosticPinBGrounded() {
 
     return ( ! (PORTC.IN & _BV(2) ));
 
 }
 
 
-inline uint8_t testPinTGrounded() {
+inline uint8_t diagnosticPinTGrounded() {
 
     return ( ! (PORTC.IN & _BV(3) ));
 
@@ -1193,6 +1193,9 @@ then if we want to continue to keep accurate count.
 
 // Save to chip
 
+// Always do a reset before calling this so we don't
+// risk a time increment in the middle of our update.
+
 // RX8900 QUIRK:
 // Setting the registers forces FOUT LOW when running at 1Hz
 // FOUT will then go HIGH after 500ms and then LOW again 1s after the original set
@@ -1214,10 +1217,12 @@ static void rx8900_time_regs_get( rx8900_time_regs_block_t *rx8900_time_regs_blo
 
 
 // Load from chip, update century interlock if necessary
+// Writes time to RX8900, which resets us back to the beginning of the current second...
+// so make sure to only call at the beginning of the current second so we do not loose time.
 
 static void rx8900_time_regs_get_and_update_century_interlock( rx8900_time_regs_block_t *rx8900_time_regs_block ) {
 
-        rx8900_time_regs_get( rx8900_time_regs_block );
+    rx8900_time_regs_get( rx8900_time_regs_block );
 
     uint8_t y = bcd2c( rx8900_time_regs_block->time_regs[6] );
     uint8_t i = bcd2c( rx8900_time_regs_block->time_regs[7] );     // Century interlock flag
@@ -1227,7 +1232,7 @@ static void rx8900_time_regs_get_and_update_century_interlock( rx8900_time_regs_
         ||                        // ...or...
         ( y<50  &&  ( i & 0x01 )) // If the year is 00-49 and the interlock is currently odd...
     ) {
-        // Increment the century interlock and write back to eeprom
+        // Increment the century interlock and write back to RTC
         i++;
         rx8900_time_regs_block->time_regs[7] = c2bcd( i );
         rx8900_time_regs_set( rx8900_time_regs_block );         // Here we rewrite the whole block. Maybe this will extend retention because we are refreshing the cells?
@@ -1757,8 +1762,7 @@ void showDashes() {
 
 void showZeros() {
 
-    #warning testing
-    showNowD( 999999 );
+    showNowD( 000000 );
     showNowHMS( 0 , 0 , 0 );
 }
 
@@ -1833,11 +1837,7 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 int main(void)
 {
 
-    #warning testing
-    initTestPinBOutput();
-    testPinBOut1();
-
-    // Enable the ultra low power RTC clock
+    // Enable the ultra low power XMEGA clock
     // We will drive the LCD from this
 
     enable_rtc_ulp();
@@ -1846,12 +1846,11 @@ int main(void)
 
     disableUnusedIOPins();      // Save a little power by disabling the input buffers on all unused pins
 
-    triggerPinDisable();        // Disable the input buffer on the trigger pin until we actually need it.
+    triggerPinDisable();        // Disable the input buffer on the trigger pin. We will enable (and this disable it) if we actually need it to read the trigger pin.
 
     USI_TWI_Master_Initialise();        // Init TWI pins to pullup.
 
-    #warning test
-    //initTestPins();             // Set pullups on the 2 extra pins on the ISP just to keep them from floating. We can also uses these for diagnostics and programming.
+    initDiagnosticPins();             // Set pullups on the 2 extra pins on the ISP just to keep them from floating. We can also uses these for diagnostics and programming.
 
     // Disable unused peripherals to save power
     prr_init();
@@ -1872,7 +1871,8 @@ int main(void)
 
     output1onFOEpin();      // Enable the 1Hz output from the RTC via its Frequency Output Enable pin
 
-    FOUT_in_pin_enable();   // Enable an interrupt on the rising edge of the 1Hz FOUT coming from the RTC
+    FOUT_in_pin_enable();   // Enable an interrupt on the falling edge of the 1Hz FOUT coming from the RTC
+                            // Setting a new time sets FOUT low, and then it goes low again on each new seconds update.
 
 
     sei();                  // Note that all our ISR are empty, we only use interrupts to wake from sleep.
@@ -1903,128 +1903,9 @@ int main(void)
 
     clearLCD();
 
-
-
-#warning test
-
-rx8900_time_regs_block_t zero;
-//rx8900_time_regs_reset(&zero);
-rx8900_time_regs_set(&zero);
-// Regs updated. FOUT should be LOW.
-
-
-testPinBOut0();
-
-triggerPinEnable();
-
-clearLCD();
-
-
-while (1) {
-
-
-    /*
-    if (testFOUT()) {
-        testPinBOut1();
-    } else {
-        testPinBOut0();
-    }
-
-    if (testPinTGrounded()) {
-        rx8900_reset();
-    }
-
-    */
-
-
-
-    rx8900_time_regs_block_t time_now_reg_block;
-
-    uint8_t s[12];
-
-    clearLCD();
-
-    for(uint8_t i=0; i<6; i++ ) {
-
-
-        _delay_ms(100);
-
-        rx8900_time_regs_get(&time_now_reg_block );
-        testPinBOut1();
-        s[i] = time_now_reg_block.time_regs[0] & 0x0f;
-        testPinBOut0();
-        displaydigit( i , s[i] , 1 );
-
-    }
-    /*
-    while (testFOUT());
-    while (!testFOUT());
-    */
-
-
-    testPinBOut1();
-    sleep_cpu();
-    testPinBOut0();
-
-
-    //_delay_ms(1020);
-
-    for(uint8_t i=6; i<12; i++ ) {
-     _delay_ms(100);
-        rx8900_time_regs_get(&time_now_reg_block );
-        s[i] = time_now_reg_block.time_regs[0] & 0x0f;
-        displaydigit( i , s[i] , 1 );
-        //_delay_ms(20);
-
-    }
-
-    _delay_ms(300);
-
-    //sleep_cpu();
-    while (!triggerPinPresent());
-    _delay_ms(100);
-
-    while (triggerPinPresent());
-    _delay_ms(100);
-
-
- }
-
-
-     rx8900_time_regs_block_t time_now_reg_block1;
-
-     while (1) {
-
-         if (testPinBGrounded()) {
-
-            showDashes();
-
-            while (testPinBGrounded());
-
-             rx8900_reset();
-
-         } else {
-
-            sleep_cpu();
-
-         }
-
-         rx8900_time_regs_get( &time_now_reg_block1 );
-         clearLCD();
-         showClockTime( &time_now_reg_block1 );
-
-         if ( testFOUT() ) {
-
-             showNowD(99999);
-
-         }
-     }
-
-
-
     // Diagnostic functions
 
-    while (testPinBGrounded()) {
+    while (diagnosticPinBGrounded()) {
 
         // Test pin B will show the current time in the RTC - even if it has not been set or reset yet
         // Right colon indicates RTC time
@@ -2053,7 +1934,7 @@ while (1) {
 
 
 
-    while (testPinTGrounded()) {
+    while (diagnosticPinTGrounded()) {
 
         // Test pin T will show the current trigger time - even if it has not been set yet
         // Left colon indicates trigger time
@@ -2136,14 +2017,16 @@ while (1) {
         // under low power description it says we must reset after a VLF. Do they mean reset
         // the generic verb, or this reset bit?
 
-        // At least this will align the start-of-second to now deterministically
-
+        // This resets us back to the begining of the current second. This will prevent
+        // a time increment from happening while we are setting the new time.
         rx8900_reset();
 
         rx8900_time_regs_set( &now );
 
-        //rx8900_set_magic();     // As a backup plan, also store our secret magic in the unused alarm registers
-        // so we can check later
+        // Empirically determined that setting the time also resets the seconds phase and the FOUT phase
+
+        rx8900_set_magic();     // As a backup plan, also store our secret magic in the unused alarm registers
+                                // so we can check later
 
         // Mark that we used the start_time so we don't try to reuse it
         save_start_flag_to_EEPROM();
@@ -2210,7 +2093,6 @@ while (1) {
 
     // If we get here, then we know that the RTC has the correct time
 
-
     rx8900_time_regs_block_t time_trigger_reg_block;
 
     // Have we ever been triggered?
@@ -2229,13 +2111,9 @@ while (1) {
 
         }
 
-
-        // This sleep_cpu() insures that we start counting at the begining of an RTC second
-        // otherwise we could be 1 second behind until the next battery change.
-
-        // This also clears any pending pin change interrupt that could short circuit the initial
-        // 1 second and gives us a full second to get real time, do the calculation,
-        //  and get the initial count up before real time updates.
+        // This sleep_cpu() jumps us to the begining of the next second on the RTC
+        // This way we know when we do the Tiem Since Lanuch calculation we are including the
+        // current full second
 
         sleep_cpu();
 
@@ -2303,11 +2181,14 @@ while (1) {
 
         // Align the RTC second boundary to NOW so it is in phase with when the pin was pulled.
 
-        // This should reset us back to the beginning of the current second
+        // This resets us back to the beginning of the current second
         // so we can drop any fractional second since we have no good way to measure that
         // Sure our real time will be off by up to 1 second forevermore, but worth it to have the count
         // start on an even second boundary so that the first 0->1 transistion happens 1 full second
         // after the trigger is pulled.
+
+        // ALternately we could wait for next forward second update, but then the person pulled the trigger and they
+        // might be waiting up to a second for the show to begin... and that is no fun!
 
         /*
             Next update timing of a Seconds counter from RESET.
@@ -2358,13 +2239,22 @@ while (1) {
 
     }
 
+    // When we get here, we know that the RTC has a good time and trigger_time is set.
 
+    // Now we sleep to make sure we are in sync with the RTC seconds update (the flash takes several
+     // 100 milliseconds). We want to be right at the beginning of the current second
+    // because we do not want to miss a pulse between when we check the time and get counting
+    // or our count display will be behind.
 
-    // When we get here, we know that the RTC has a good time and trigger_time is set,
-    // and we also know that the RTC is near the beginning of the current second. This is important
-    // because we do not want to miss a pulse or our count display will be behind.
+    // We also want to be at the beginning of the current second in case we has to roll the
+    // century interlock. If we do, then it will write back to the RTC which will set us back to the
+    // beginning of the current second. The closer we are to the beginning when we do this,
+    // the less time we loose. Don't fret too much, only happens once every 50 years.
+
     // Now we have to figure out what the display count looks like by subtracting the
     // time_trigger from the time_now to get the time_since_lanuch
+
+    sleep_cpu();
 
     rx8900_time_regs_block_t time_now_reg_block;
     rx8900_time_regs_get_and_update_century_interlock( &time_now_reg_block );       // This will the century interlock and save back to EEPROM if necessary
