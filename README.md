@@ -5,7 +5,7 @@ PCB and firmware for the CW&T Time Since Launch project.
 ## Design goals:
 
 * Run for decades on 2xAA batteries.
-* Stay accurate to to within +/-2ppm over the lifetime.  
+* Stay accurate to to within ±2ppm over the lifetime.  
 * Replaceable batteries, with continued timekeeping during a reasonable battery swap time period.  
 
 ## Critical parts:
@@ -23,7 +23,7 @@ We actually have two oscillators running simultaneously here.
 
 The ATMEGA uses either the XTAL or the internal ULP oscillator to drive the LCD controller. The xtal uses about 0.3uA less current, but requires an extra part (the ULP is built in to the XMEGA).  
 
-The RX8900 is programmed to generate a 1Hz output pulse (FOUT) taht is connected to ain IO pin on the XMEGA. Each of these pulses causes an interrupt on the XMEGA which wakes it from deep sleep. The XMEGA then increments the count and updates the display and goes back to deep sleep until the next pulse.  
+The RX8900 is programmed to generate a 1Hz output pulse (FOUT) taht is connected to an IO pin on the XMEGA. The rising edge of each of these pulses causes an interrupt on the XMEGA which wakes it from deep sleep. The XMEGA then increments the count and updates the display and goes back to deep sleep until the next pulse.  
 
 ## XMEGA EEPROM usage
 
@@ -82,15 +82,15 @@ This will get us an additional 127 centuries of run time, which puts us at the y
 
 ### The leap year problem
 
-The RX8900 counts any year ending in `00` as a leap year, but in real life, 2100 is not a leap year.
+The RX8900 counts any year ending in `00` as a leap year, but in real life 2100 is not a leap year.
 
-This means that if a unit is programmed in the 2000's and triggered on 3/1/2100 then the trigger date in EEPROM will be 2/29/2100, and any day after that will be 1 day behind the actual calendar date when the trigger was pulled. The count will still always be right, and the only way you'd know about this is if you inspect the trigger time with the diagnostic mode.
+This means that if a unit is programmed in the 2000's and triggered on 3/1/2100 then the trigger date in EEPROM will be 2/29/2100, and any day after that will be 1 day behind the actual calendar date when the trigger was pulled. The count will still always be right, and the only way you'd know about this is if you inspect the trigger time with the diagnostic mode or if you have to reset the RTC.
 
 This divergence will increase by 1 for each non-leap year ending in `00` after 2000, including 2200 and 2300 (2400 is a leap). 
 
-Why don't we just correct for this? Well because as far as the RX8900 is concerned 2/29/2100 actually happened, so a trigger could happen on that day.
+Why don't we just correct for this in the firmware? Well because as far as the RX8900 is concerned 2/29/2100 actually happened, so a trigger could happen on that day.
 
-Since this problem is predicable we can account for it when serving units after 2100. 
+Since this problem is predicable we can account for it when resetting the RTC in units triggered after 2/28/2100. 
 
 ## Method of Operation
 
@@ -98,11 +98,11 @@ Since this problem is predicable we can account for it when serving units after 
 ### Factory power up
 The factory burns the firmware into flash and also stores the current GMT time into `STARTTIME` in the EEPROM block. 
 
-On initial power up, firmware csee a new time block in EEPROM and uses it to set the RTC. It then sets the START FLAG so that the time is not programmed again on subsequent power ups.  
+On initial power up, firmware sees a new `STARTTIME` block in EEPROM and uses it to set the RTC. It then sets the `STARTFLAG` so that the time is not programmed again on subsequent power ups.  
 
-If the pin is out at this point we go into clock mode and show the current GMT time until the pin is inserted. THIS CLOCKMODE IS MEANT FOR TESTING ONLY. It is very high power (like 50x normal count!), so be sure to insert the pin as soon as you have verified the correct time.  
+If the trigger pin is out at this point we go into clock mode and show the current GMT time until the pin is inserted. THIS CLOCKMODE IS MEANT FOR TESTING ONLY. It is very high power (like 50x normal count!), so be sure to insert the pin as soon as you have verified the correct time. DO NOT USE A TSL IN CLOCKMODE AS A CLOCK. If you really want a TSL clock, we can make you power efficient firmware for that. 
 
-Once the pin is in, we go into WAITING FOR TRIGGER mode. 
+Once the pin is in, we go into Ready To Launch mode. 
  
 ## Display modes
 
@@ -122,9 +122,9 @@ Do we need this? Well we certainly do not need it if the RTC is already running,
 
 Shows current real time as MMDDYY HHMMSS with blinking ":"'s.
 
-This time comes from the RTC and should be correct GMT +/2ppm if it was programmed correctly at the factory. 
+This time comes from the RTC and should be correct GMT ±2ppm if it was programmed correctly at the factory. 
 
-This is shown after initial time is set by the programming fixture until the pin is inserted.    
+This mode is shown after initial time is set by the programming fixture until the pin is inserted.    
 
 WARING: Clock mode uses about 50x as much power as normal Time Since Launch mode, so don't leave it on for too long! For diagnostics only! 
 
@@ -132,14 +132,13 @@ WARING: Clock mode uses about 50x as much power as normal Time Since Launch mode
 
 Shows a mesmerizing winding pattern with 1Hz update rate. 
 
-The purpose of this pattern is to show the user that we are ready and willing, and also make apparent any bad LCD segments either stuck on or off. 
+The purpose of this pattern is to show the user that we are ready and willing, and also make apparent any bad LCD segments stuck either on or off. 
 
-We enter this mode on power up if the trigger pin has never been pulled before, and we exit it when the pin is pulled. When the pin is finally pulled, we blink the LEDs and save the current time from the RTC into EPPROM in the TRIGGER TIME block to remember the trigger time.  
-
+We enter this mode on power up if the trigger pin has never been pulled before, and we exit it when the pin is pulled. When the pin is finally pulled, we blink the flashbulb LEDs and save the current time from the RTC into EPPROM in the `TRIGGERTIME` block to remember the trigger time and set the `TRIGGERFLAG`.  
 
 ### Time Since Launch Mode
 
-Her we count up the days, hours, minutes, and seconds since the trigger was pulled. 
+Here we count up the days, hours, minutes, and seconds since the trigger was pulled. 
 
 When we reach 1,000,000 days we switch to Long Now mode. 
 
@@ -149,7 +148,7 @@ Shows the time the trigger pin was pulled in MMDDYY HHMMSS blinking at 0.5Hz.
 
 Indicates that the trigger pin was pulled and we marked the moment shown on the display, but since then the real time was lost (RTC lost power) and needs to be set before we can show Time Since Launch mode. 
 
-The unit can be factory serviced and set with the correct real time and pick up where it left off. 
+The unit can be factory serviced and set with the correct real time and it will pick up where it left off. 
 
 ### Clock Error mode
 
@@ -157,7 +156,7 @@ Shows `cLoc Error` blinking forever.
 
 Indicates that the trigger pin has never been pulled, and that the real time was lost so now needs the real time to be set before we can go to Ready To Launch mode.    
 
-This likely means that the unit was stored as old new stock for 100+ year and the batteries we allowed to go completely dead before first use. The unit can be factory serviced to set the real time and then will be ready for first trigger.   
+This likely means that the unit was stored as old new stock for 100+ years and the batteries we allowed to go completely dead before first use. The unit can be factory serviced to set the real time and then will be ready for first trigger.   
 
 ### Low Battery mode
 
@@ -167,9 +166,9 @@ The battery voltage is checked once at start power up and then every 8 days in T
 
 When you see this, you should swap out the batteries for new ones. Be sure to use Energizer Ultra. Be sure to have the new ones ready before you remove the old ones. Change the batteries one at a time - taking the first old one out and putting the new one in, then taking the second one out and putting the new one in.
 
-If after you change the batteries you still see low battery mode, then pull one of the batteries out and wait for the LCD to go blank and then quickly put the battery back in. 
+If after you change the batteries you still see low battery mode, then pull one of the batteries out and wait for the LCD to go blank and then quickly put the battery back in. Alternately you can use a wire jumper to connect the `C' pin and the `G` pin on the 6 pin ISP header to reset the board. 
 
-Note that we intentionally do not check for low batteries during Ready to Launch mode. It is expected that a TSL will spend most of its decades in Time Since Launch mode, so no point in wasting good power right at the beginning of its long life. Also, what cut off would we use? Should it be higher than the cut off during Time Since Launch mode? If your TSL has been sitting around for more than 20 years and you are about to have a big moment and you want to play it safe, you can always put in new batteries. 
+Note that we intentionally do not check for low batteries during Ready to Launch mode. It is expected that a TSL will spend most of its decades in Time Since Launch mode, so no point in wasting good power right at the beginning of its long life. Also, what cut off would we use? Should it be higher than the cut off during Time Since Launch mode? If your TSL has been sitting around for more than 20 years and you are about to have a big moment and you want to play it safe, you can always prophylacticly put in new batteries. 
 
 
 ### Long Now mode
@@ -185,7 +184,7 @@ The idea here is to avoid problems of people trying to ebay old TSL units that h
 
 Shows `EEPro ErrorX` blinking forever.
 
-This is shown on start-up if the EEPROM is in an inconsistent state. This usually means either that the EEPROM was never programmed (it defaults to 0xff), or it got corrupted somehow. 
+This is shown on start-up if the EEPROM is in an inconsistent state. This usually means either that the EEPROM was never programmed (it defaults to 0xff's), or it got corrupted somehow. 
 
 The `X` after `EEPro` is a code that tells you the first problem found (they are checked in order). 
 
@@ -202,7 +201,7 @@ The `X` after `EEPro` is a code that tells you the first problem found (they are
 
 #### Codes 1-3
 
-All flags must have a value of either 0 (not set) or 1 (set). If not, then an invalid flag EEPRo Error will come up.
+All flags must have a value of either 0 (not set) or 1 (set).
 
 #### Code 4
 
@@ -210,7 +209,7 @@ How could the user have pulled the trigger if we never set the start time? Impos
 
 #### Code 5
 
-To find the Time Since Launch, we need to subtract the START time from the TRIGGER time, so the TRIGGER time must be after the START time. 
+To find the Time Since Launch, we need to subtract the `STARTTIME` from the `TRIGGERTIME`, so the `TRIGGERTIME` must be *after* the `STARTSTART`. 
 
 #### Code 6
 
@@ -218,21 +217,21 @@ To find the Time Since Launch, we need to subtract the START time from the TRIGG
 
 #### Code 7 
 
-Start time failed validity checks on start up. (i.e. month was greater than 12)
+`STARTTIME` failed validity checks on start up. (i.e. month was greater than 12)
 
 #### Code 8 
 
-Trigger time failed validity checks on start up. (i.e. month was greater than 12)
+`TRIGGERTIME` failed validity checks on start up. (i.e. month was greater than 12)
 
-## `START TIME` offset
+## `STARTTIME` delay offset
 
-When programming the `START TIME` into the EEPROM, bake sure to account for (1) the time it takes to generate the EEPROM file and program it into the unit, and (2) the 1 second warm up delay when the unit first comes up. 
+When programming the `STARTTIME` into the EEPROM, be sure to account for (1) the time it takes to generate the EEPROM file and program it into the unit, and (2) the 1 second warm up delay when the unit first comes up. 
 
 ## Diagnostics
 
 ### Factory program
 
-On the initial power-up after the time as been set to the value supplied in the START TIME EEPROM block, the display will show the current time for as long as the pin is out. 
+On the initial power-up after the time as been set to the value supplied in the `STARTTIME` EEPROM block, the display will show the Clock mode for as long as the trigger pin is out. 
 
 This is handy for verifying the correct time was programmed. 
 
@@ -244,9 +243,22 @@ They are only checked at start up. You can force a start up by grounding the RES
 
 #### `B` Pin
 
-Grounding the `B` pin will show the current time as loaded from the RTC on the display. This will show even if the clock has not been initialized. 
+Grounding the `B` pin will show a series of three display phases, switching once per second.
 
-The right `:` is lit to differentiate this mode.
+The sequence will repeat if pin `B` is still grounded after phase 3 is displayed.  
+
+##### Phase 1
+
+The LCD displays the `STARTTIME` block from EEPROM. 
+
+Left `:` is on to differentiate this display. 
+
+
+##### Phase 2
+
+the current time as loaded from the RTC on the display. This will show even if the clock has not been initialized. 
+
+The right `:` is lit to differentiate this display.
 
 Left decimal point means low voltage flag set in RX8900 right now.
 
@@ -258,12 +270,18 @@ The RX8900 low voltage is checked and the EEPROM flag is set *after* this diagno
 
 The low voltage flag is cleared in the RX8900 when it is programmed with the start time at the factory. 
 
+##### Phase 3
+
+The left LCD module shows `XXVOLt` where `XX` is the current Vcc voltage as read by the XMEGA analog to digital converter. There is an implied decimal point between the two digits, so `31VOLT` means the XMEGA just sampled the Vcc as 3.1 volts. Note that this voltage can be slightly lower than what it will be when running normally because this diagnostics screen uses much more current than the normal modes do.    
+
+The right LCD module shows `VErXXX` where `XXX` is the current firmware version as defined in the TSL.c source code. There is an implied decimal point between the first and second digits so `VER101` indicates firmware version 1.01.    
+   
 
 #### `T` Pin
 
-Grounding the `T` pin will show the stored trigger time. The left `:` is lit to differentiate this mode.
+Grounding the `T` pin will show the stored trigger time. The left & right `:`'s are lit to differentiate this display.
 
-The display will show "no TriG" if the EEPROM trigger flag is not set.   
+The display will show "no triG" if the EEPROM trigger flag is not set.   
 
 
 ## Build notes
@@ -275,19 +293,76 @@ gcc optimization: `-O3 -flto`
 -x c -funsigned-char -funsigned-bitfields -I"C:\Program Files (x86)\Atmel\Studio\7.0\Packs\atmel\XMEGAB_DFP\1.1.55\include"  -O3 -flto -ffunction-sections -fdata-sections -fpack-struct -fshort-enums -g2 -Wall -mmcu=atxmega128b3 -B "C:\Program Files (x86)\Atmel\Studio\7.0\Packs\atmel\XMEGAB_DFP\1.1.55\gcc\dev\atxmega128b3" -c -std=gnu99 -MD -MP -MF "$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -MT"$(@:%.o=%.o)" 
 ```
 
+## Current Usage
+
+| Mode | Vcc=3.55V| Vcc=2.6V |
+| - | -: | -: | 
+| Ready to Launch | 4.9uA | 4.3uA | 
+| Time Since Launch | 5.9uA | 5.6uA |
+| Long Now | 4.7uA | 4.2uA | 
+| Low Battery | 3.9uA |  3.5uA |
+| quiescent | 3.9uA | 3.4uA |
+
+Quiescent mode means that all LCD segments are turned off, interrupts are disabled, and the XMEGA is put into Power Save mode. The only current draw should be from the RX8900 and the XMEGA quiescent power.   
+
+3.55V is approximately the voltage of a pair of fresh Energizer Ultra batteries.
+2.6V is approximately the voltage when we drop to Low Battery mode.
+
+Note that voltage drop over time is not expected to be linear with Energizer Ultra cells. These batteries are predicted to spend most of their lives towards the higher end of the voltage range and only start dropping when they get near to their end of life.  
+
+### Color
+
+Comparing Time Since Launch mode to Long Now mode lets us see how much power is used in the the timekeeping code.  
+
+Comparing Low Battery mode to Long Now mode lets us see how much of the power is dependent on just how many LCD segments are lit.
+
+Comparing maximum and minimum operating voltages for different modes lets us see how much of the power usage is dependent on supply voltage, and how that relates to time spent in sleep versus active mode (Time Since Launch spend a lot of time in active, whereas Long Now and Low Battery spend almost none).
+
+Comparing Low Battery mode to quiescent mode lets us see how much power used by the interrupt ISRs (confounded slightly by those tiny little battery icon segments and the single blink instructions in Low Battery mode).    
+
+### Conclusions
+
+There is not much to be gained by elimination the ISR overhead. This is surprising. Those unnecessary PUSHes and POPs still bug the crap out of me. 
+
+There are gains of up to 1uA possible from having fewer LCD segments lit. Not sure how actionable this is. We could, say, save 0.5uA by blinking the Time Since Launch mode screen off every other second. It is likely that Ready To Launch mode's low power relative to Time Since Launch mode is due to the fact that it has only 1 segment lit per digit. 
+
+Probably the best place to focus effort is on the Time Since Launch update code since there is about 1uA on the table and the device spends the vast majority of its live here.  
+  
+
+### Measurement conditions
+
+
+Production board from initial batch. Bare PCB on my desk (not in tube).  
+68F
+80%RH
+
+(Higher humidity and temperature tends to increase current consumption. Need some different weather conditions to quantify this!) 
+
 ## Status
 
+Firmware is Feature complete but could use more testing. 
 
-We are at an average of <6uA running current over the full voltage range. 
+We are at an average of <6uA running current over the full voltage range.
 
 If the battery datasheets are to be believed, this suggests a runtime of ~66 years. Even derating a few percent for internal leakage, we should get a decent run time between battery changes. 
 
 
 ## Future directions
 
-Add a suplimental pull-up resistor to ~RESET line. In dry conditions it is possible to reset the XMEGA over the built-in pull-up when it is in the tube using static fields. Don't really need this since the firmware is spurious RESET tolerant, but cleaner.   
+### Software 
+Use software generated software to unroll all the LCD register updates into computationally optimal sequences. We have plenty of flash, mind as well use it!
 
-Add a diode or MOSFET over the RTC so that the RTC backup capacitor can not back feed the XMEGA. This would let us use the RTC built-in voltage detector to drop into backup mode which would reduce drain when batteries are pulled. Don't really need this, but cleaner at the cost of one part.   
+Find a way to suppress the ISR call on interrupts. Maybe by playing with interrupt priorities? We do not use the ISR and just do an empty return, so why waste all those cycle on PUSHing and POPing. 
+
+### Hardware
+
+Add a supplemental pull-up resistor to ~RESET line. In dry conditions it is possible to reset the XMEGA over the built-in pull-up when it is in the tube using static fields. Don't really need this since the firmware is spurious RESET tolerant, but cleaner.
+
+Add a diode or MOSFET over the RTC so that the RTC backup capacitor can not back feed the XMEGA. This would let us use the RTC built-in voltage detector to drop into backup mode which would reduce drain when batteries are pulled. Don't really need this, but cleaner at the cost of one part.
+
+Add an Ultra-Low Quiescent Current Low-Dropout Linear Regulator in front of the XMEAG. The current drops from 5.6uA@3.2V to 4.2uA@2.0V, so some potential for savings here, but worth the extra part?  
+
+Try driving the LCD bias voltages directly from the battery voltage. The Energizer Ultra's have remarkably stable voltage over most of their lives and we go into Low Battery mode when they start to drop, so might be able to save power by disabling the XMEGA charge pump and finding contrast settings that work with the battery voltage direct?
 
 If possible find a static LCD and bit bang the segments. Since our batteries have such a flat voltage curve, we could avoid the biasing circuits and charge pump and save a lot of power.  
 

@@ -126,6 +126,10 @@ void lcd_blank();
 
 void lcd_unblank();
 
+// The text part of the Pin B Phase 1 diagnostics display
+// (space left for numbers to be filled in)
+
+void showPinBPhase3Text();
 
 
 #endif /* LCD_H_ */

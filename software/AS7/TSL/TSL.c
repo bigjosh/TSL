@@ -5,6 +5,10 @@
  *
  */
 
+// Shown on Pin `B` diagnostic display.
+
+#define VERSION 101
+
 // Required AVR Libraries
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -418,7 +422,7 @@ static inline uint8_t adc_read_vcc_x_10() {
     ADCB.CTRLA = ADC_ENABLE_bm;
 
     // Wait for the ADC start-up time (typical max. 24 ADC clocks).
-    // Data sheet really not clear here. Says typical 12 ticks, 
+    // Data sheet really not clear here. Says typical 12 ticks,
     // max 24 ticks. How do we know when it is ready?
     // (Round up to be safe)
     _delay_us( cycles2us( ADC_TICKS_TO_CYCLES(24)  ) + 1 );
@@ -1931,15 +1935,6 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
                     so=0;
                     st++;
 
-                        #warning testing
-                        if ( check_low_battery() ) {
-
-                            // Show blinking battery icon. Never returns.
-                            low_battery_mode();
-                            __builtin_unreachable();
-
-                        }
-
                 }       // s
 
                 st=0;
@@ -1984,6 +1979,84 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
 }
 
+
+void showPinBPhase1() {
+
+    // Show start time from EEPROM
+    // Both `:`'s lit
+
+    rx8900_time_regs_block_t time_start_reg_block;
+
+    colonLOn();
+
+    load_starttime_from_EEPROM( &time_start_reg_block );
+    showClockTime( &time_start_reg_block );
+
+}
+
+void showPinBPhase2() {
+
+    // Show clock time from RTC
+    // Right `:` lit
+    // Decimal points indicate the Low Voltage flags
+
+    if ( rx8900_low_voltage_check()  ) {
+        decimalLOn();
+    }
+
+    if ( load_low_voltage_flag_from_EEPROM() != 0x00 ) {
+        decimalROn();
+    }
+
+    rx8900_time_regs_block_t time_now_reg_block;
+
+    colonROn();
+    rx8900_time_regs_get( &time_now_reg_block );
+    showClockTime( &time_now_reg_block );
+
+}
+
+
+void showPinBPhase3() {
+
+    // Show the text template so we can fill in the values
+    showPinBPhase3Text();
+
+    // Show battery voltage digits on left LCD
+
+    uint8_t vcc = adc_read_vcc_x_10();
+
+    digitOn(  vcc / 10 ,11 );
+    digitOn(  vcc % 10 ,10 );
+
+    // Show firmware version digits on right LCD
+
+    digitOn(  (VERSION / 100)       , 2 );
+    digitOn(  (VERSION % 100 / 10)  , 1 );
+    digitOn(  (VERSION % 10)        , 0 );
+
+}
+
+// Diagnostic display when Pin B is grounded durring startup 
+
+void showPinT() {
+    
+    if ( load_trigger_flag_from_EEPROM() ) {
+
+        rx8900_time_regs_block_t trigger_time_reg_block;
+
+        load_triggertime_from_EEPROM( &trigger_time_reg_block );
+        colonLOn();
+        colonROn();
+
+        showClockTime( &trigger_time_reg_block );
+
+    } else {
+
+        showNoTrig();
+    }    
+    
+}    
 
 int main(void)
 {
@@ -2070,23 +2143,18 @@ int main(void)
         // Left decimal point means low voltage flag set in RX8900
         // Right decimal point means low voltage flag set in EEPROM (we have seen a low voltage on RX8900 in the past)
 
-        if ( rx8900_low_voltage_check()  ) {
-            decimalLOn();
-        }
-
-        if ( load_low_voltage_flag_from_EEPROM() != 0x00 ) {
-            decimalROn();
-        }
-
-        rx8900_time_regs_block_t time_now_reg_block;
-
-        colonROn();
-        rx8900_time_regs_get( &time_now_reg_block );
-        showClockTime( &time_now_reg_block );
+        showPinBPhase1();
         sleep_cpu();
 
         clearLCD();
+        showPinBPhase2();
+        sleep_cpu();
 
+        clearLCD();
+        showPinBPhase3();
+        sleep_cpu();
+
+        clearLCD();
     }
 
 
@@ -2098,24 +2166,10 @@ int main(void)
         // Left colon indicates trigger time
         // Right decimal point means trigger has been pulled
 
-        if ( load_trigger_flag_from_EEPROM() ) {
-
-            rx8900_time_regs_block_t trigger_time_reg_block;
-
-            load_triggertime_from_EEPROM( &trigger_time_reg_block );
-            colonLOn();
-            showClockTime( &trigger_time_reg_block );
-            sleep_cpu();
-            clearLCD();
-
-        } else {
-
-            showNoTrig();
-            sleep_cpu();
-            clearLCD();
-
-        }
-
+        showPinT();        
+        sleep_cpu();        
+        clearLCD();
+        
     }
 
 

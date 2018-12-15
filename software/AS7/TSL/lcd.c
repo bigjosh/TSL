@@ -83,25 +83,26 @@ const uint8_t lcd_font[] = {
     SEG_A | SEG_E | SEG_C | SEG_D | SEG_F | SEG_G ,         // 9
 };
 
-uint8_t lcd_font_char_dash = { SEG_G };                                 // '-'
-uint8_t lcd_font_char_c    = { SEG_G | SEG_B | SEG_A };                 // c
-uint8_t lcd_font_char_L    = { SEG_C | SEG_B | SEG_A };                 // L
-uint8_t lcd_font_char_o    = { SEG_G | SEG_B | SEG_A | SEG_F };         // o
-uint8_t lcd_font_char_E    = { SEG_D | SEG_C | SEG_G | SEG_B | SEG_A }; // E
-uint8_t lcd_font_char_r    = { SEG_B | SEG_G };                         // r
-uint8_t lcd_font_char_P    = { SEG_E | SEG_D | SEG_C | SEG_G | SEG_B }; // P
+const uint8_t lcd_font_char_dash = { SEG_G };                                 // '-'
+const uint8_t lcd_font_char_c    = { SEG_G | SEG_B | SEG_A };                 // c
+const uint8_t lcd_font_char_L    = { SEG_C | SEG_B | SEG_A };                 // L
+const uint8_t lcd_font_char_o    = { SEG_G | SEG_B | SEG_A | SEG_F };         // o
+const uint8_t lcd_font_char_E    = { SEG_D | SEG_C | SEG_G | SEG_B | SEG_A }; // E
+const uint8_t lcd_font_char_r    = { SEG_B | SEG_G };                         // r
+const uint8_t lcd_font_char_P    = { SEG_E | SEG_D | SEG_C | SEG_G | SEG_B }; // P
 
-uint8_t lcd_font_char_J    = { SEG_B | SEG_A | SEG_F | SEG_F | SEG_E }; // J
-uint8_t lcd_font_char_O    = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F | SEG_E }; // O
-uint8_t lcd_font_char_S    = { SEG_D | SEG_C | SEG_G | SEG_F | SEG_A }; // S
-uint8_t lcd_font_char_H    = { SEG_B | SEG_C | SEG_F | SEG_G | SEG_E }; // H
+const uint8_t lcd_font_char_J    = { SEG_B | SEG_A | SEG_F | SEG_F | SEG_E }; // J
+const uint8_t lcd_font_char_O    = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F | SEG_E }; // O
+const uint8_t lcd_font_char_S    = { SEG_D | SEG_C | SEG_G | SEG_F | SEG_A }; // S
+const uint8_t lcd_font_char_H    = { SEG_B | SEG_C | SEG_F | SEG_G | SEG_E }; // H
 
-uint8_t lcd_font_char_n    = { SEG_B | SEG_G | SEG_F };                 // n
-uint8_t lcd_font_char_T    = { SEG_D | SEG_C | SEG_B };                 // T
-uint8_t lcd_font_char_i    = { SEG_B };                                 // i
-uint8_t lcd_font_char_G    = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F  }; // G
+const uint8_t lcd_font_char_n    = { SEG_B | SEG_G | SEG_F };                 // n
+const uint8_t lcd_font_char_t    = { SEG_B | SEG_C | SEG_A | SEG_G };         // t
+const uint8_t lcd_font_char_i    = { SEG_B };                                 // i
+const uint8_t lcd_font_char_G    = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F  }; // G
 
-
+const uint8_t lcd_font_char_V    = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_E }; // V (ok, not really)
+const uint8_t lcd_font_char_l    = { SEG_C | SEG_B };                         // l
 
 // Map LCD seg pins to MCU seg pins (set by PCB layout)
 
@@ -352,7 +353,7 @@ void showNoTrig() {
     segmentsOn( lcd_font_char_n , 11 );
     segmentsOn( lcd_font_char_o , 10 );
 
-    segmentsOn( lcd_font_char_T , 5 );
+    segmentsOn( lcd_font_char_t , 5 );
     segmentsOn( lcd_font_char_r , 4 );
     segmentsOn( lcd_font_char_i , 3 );
     segmentsOn( lcd_font_char_G , 2 );
@@ -387,6 +388,26 @@ void showEEProError( uint8_t code ) {
     segmentsOn( lcd_font_char_o , 2 );
     segmentsOn( lcd_font_char_r , 1 );
     digitOn(  code , 0 );
+
+}
+
+// The text part of the Pin B Phase 1 diagnostics display
+// (space left for numbers to be filled in)
+
+void showPinBPhase3Text() {
+
+    // Show "VOLT" on left LCD
+
+    segmentsOn( lcd_font_char_V , 9 );
+    segmentsOn( lcd_font_char_o , 8 );
+    segmentsOn( lcd_font_char_l , 7 );
+    segmentsOn( lcd_font_char_t , 6 );
+
+    // Show "VER" on right LCD
+
+    segmentsOn( lcd_font_char_V , 5 );
+    segmentsOn( lcd_font_char_E , 4 );
+    segmentsOn( lcd_font_char_r , 3 );
 
 }
 
