@@ -161,6 +161,17 @@ This likely means that the unit was stored as old new stock for 100+ year and th
 
 ### Low Battery mode
 
+Blinks the little battery icons at 0.5Hz to indicate that a low battery voltage was detected.
+
+The battery voltage is checked once at start power up and then every 8 days in Time Since Launch mode starting at the change from day 0 to day 1. If the voltage is less than about 2.6 volts, then we go into low battery mode.
+
+When you see this, you should swap out the batteries for new ones. Be sure to use Energizer Ultra. Be sure to have the new ones ready before you remove the old ones. Change the batteries one at a time - taking the first old one out and putting the new one in, then taking the second one out and putting the new one in.
+
+If after you change the batteries you still see low battery mode, then pull one of the batteries out and wait for the LCD to go blank and then quickly put the battery back in. 
+
+Note that we intentionally do not check for low batteries during Ready to Launch mode. It is expected that a TSL will spend most of its decades in Time Since Launch mode, so no point in wasting good power right at the beginning of its long life. Also, what cut off would we use? Should it be higher than the cut off during Time Since Launch mode? If your TSL has been sitting around for more than 20 years and you are about to have a big moment and you want to play it safe, you can always put in new batteries. 
+
+
 ### Long Now mode
 
 Shows `999999 235959` blinking forevermore. 
@@ -250,9 +261,10 @@ The low voltage flag is cleared in the RX8900 when it is programmed with the sta
 
 #### `T` Pin
 
-Grounding the `T` pin will show the stored trigger time. This will show even if the trigger has not happened. The left `:` is lit to differentiate this mode.
+Grounding the `T` pin will show the stored trigger time. The left `:` is lit to differentiate this mode.
 
 The display will show "no TriG" if the EEPROM trigger flag is not set.   
+
 
 ## Build notes
 

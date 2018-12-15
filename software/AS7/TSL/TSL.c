@@ -10,6 +10,7 @@
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
 #include <avr/eeprom.h>
+#include <avr/pgmspace.h>       // pgm_read_byte() in ReadSignatureByte()
 
 #include "lcd.h"
 
@@ -296,11 +297,185 @@ void lcd_init(void) {
     //TODO: Check contrast settings
 }
 
+
+// The ADC on this chip lives on PORTB
+
+// Disable both the analog to digital converter and the analog comparitor
+// to save power
+
+void adc_powerdown_adc_and_ac() {
+
+    PR.PRPB = PR_ADC_bm | PR_AC_bm;
+
+}
+
+// Enable the analog to digital converter but disable (or leave disabled) the analog comparitor
+// We never want the AC enabled, so we hard code these two together to save having to read the register,
+// change the ADC bit, and and write back.
+
+void adc_powerup_adc_powerdown_ac() {
+
+    PR.PRPB = PR_AC_bm;
+
+}
+
+// Needed to get the ADC calibration
+// http://barefootelectronics.com/xMegaADC.aspx
+
+uint8_t ReadSignatureByte(uint16_t Address)
+{
+    NVM_CMD = NVM_CMD_READ_CALIB_ROW_gc;
+    uint8_t Result;
+    Result = pgm_read_byte((uint8_t *)Address);
+    NVM_CMD = NVM_CMD_NO_OPERATION_gc;
+    return Result;
+}
+
+
+// We initialize the registers in the ADC one time at startup
+// and then leave them like that so we don't waste time setting
+// them when we need a sample. These settings persist even when the
+// ADC is disabled and stopped in power reduction mode.
+// Assumes ADC is not in power reduction mode
+
+/*
+    The power reduction (PR) registers provide a method to stop the clock to individual peripherals. When this is done, the
+    current state of the peripheral is frozen and the associated I/O registers cannot be read or written. Resources used by the
+    peripheral will remain occupied; hence, the peripheral should be disabled before stopping the clock. Enabling the clock to
+    a peripheral again puts the peripheral in the same state as before it was stopped. This can be used in idle mode and
+    active modes to reduce the overall power consumption. In all other sleep modes, the peripheral clock is already stopped.
+*/
+
+// We have plenty of flash, so we inline this to save a call/return and
+// coax the compiler into simplifying the low battery voltage compare
+// in the main run() loop.
+
+inline void adc_init() {
+
+    // Set calibration bytes to factory values
+    ADCB.CALL = ReadSignatureByte(0x20) ; //ADC Calibration Byte 0
+    ADCB.CALH = ReadSignatureByte(0x21) ; //ADC Calibration Byte 1
+
+    // Lowest current for lowest power
+    // Only need 8 bits for our purposes, so save steps to save power
+   // ADCB.CTRLB = ADC_CURRLIMIT_LOW_gc | ADC_RESOLUTION_8BIT_gc;
+
+   // Signed mode to get rid off offset
+    ADCB.CTRLB = ADC_RESOLUTION_8BIT_gc | ADC_CONMODE_bm;
+
+    // Measure the Vcc against the internal 1V reference
+    // Enable the bandgap since thats where the 1V reference comes
+    ADCB.REFCTRL = ADC_REFSEL_INT1V_gc | ADC_BANDGAP_bm ;
+
+    // We leave the prescaller at default 1/4 to get the quickest measurement possible
+    // and get the hell out of here. Our main clock is 2MHz, so at 1/4 we are at 500Khz
+    // which is between 100kHZ min and 1.4MHz max ADC clock rate.
+
+    // ADCB.PRESCALER = ADC_PRESCALER_DIV4_gc;
+
+    // Set up channel 0
+    // 1x gain
+    // Internal sample (no pin)
+
+    ADCB.CH0.CTRL = ADC_CH_GAIN_1X_gc | ADC_CH_INPUTMODE_INTERNAL_gc;
+
+    // Sample the Vcc scaled down by 10x so 1V on Vcc is 0.1V on the ADC
+    // Negative input is always ground for internal measurements.
+
+    ADCB.CH0.MUXCTRL =   ADC_CH_MUXINT_SCALEDVCC_gc ;
+
+}
+
+
+// Convert clocks to microseconds
+
+static inline unsigned long cycles2us( uint32_t  cycles ) {
+
+    // Unit anaylisis : ((cycles/s)  * cycles)) / ( microseconds/s)  =  microseconds
+    return ( F_CPU  * cycles ) / 1000000UL;
+}
+
+
+// We are using 1/4 prescaller for ADC
+#define CYCLES_PER_ADC_TICK 4
+#define ADC_TICKS_TO_CYCLES(x) (x*CYCLES_PER_ADC_TICK)
+
+// Use the internal multimeter to read the current Vcc
+// Returns Vcc * 10, so 2.4 volts returns 24.
+// Assumes ADC is disabled and in power reduction mode
+// Leaves it the same way
+
+
+static inline uint8_t adc_read_vcc_x_10() {
+
+    // Turn the ADC on
+    adc_powerup_adc_powerdown_ac();
+
+    // Enable the ADC and start the conversion
+    // TODO: Can we do this in a single operation?
+    //ADCB.CTRLA = ADC_CH0START_bm | ADC_ENABLE_bm;
+
+    ADCB.CTRLA = ADC_ENABLE_bm;
+
+    // Wait for the ADC start-up time (typical max. 24 ADC clocks).
+    // Data sheet really not clear here. Says typical 12 ticks, 
+    // max 24 ticks. How do we know when it is ready?
+    // (Round up to be safe)
+    _delay_us( cycles2us( ADC_TICKS_TO_CYCLES(24)  ) + 1 );
+
+    // Wait for the bandgap to start up
+    // "Startup time as reference for ADC (1 ClkPER + 2.5µs)"
+    // TODO: Is this included in the ADC start up time?
+    _delay_us( cycles2us( ADC_TICKS_TO_CYCLES(1) ) + 3 );
+
+    // Clear the interrupt bit so we can tell when the conversion is done
+    // "The bit can also be cleared by writing a one to the bit location"
+
+    ADCB.INTFLAGS = ADC_CH0IF_bm;
+
+
+    // Start the conversion (keep enabled bit 1)
+
+    ADCB.CTRLA = ADC_CH0START_bm | ADC_ENABLE_bm;
+
+    // Wait for the conversion to complete
+    // "The interrupt flag is set when the ADC conversion is complete."
+    // This should only take a few microseconds, so not worth setting up the
+    // interrupt and sleeping.
+
+    while ( !(ADCB.INTFLAGS & ADC_CH0IF_bm) );
+
+    // We only asked for 8 bits, so grab them
+    // We are in signed mode, so using signed variable here
+    int8_t r = ADCB.CH0RESL;
+
+    // Disable the ADC (we have to before we can turn it off)
+    ADCB.CTRLA = 0;
+
+    // Turn ADC off until the next time we need to tomorrow
+    // to save power
+    adc_powerdown_adc_and_ac();
+
+    // Calculate the resulting voltage according to the formula
+    // We do this after we've shut the place down to save a smidgen of power
+    // Hopefully the compiler we will smart enough to eliminate this calculation
+    // when the caller compares the return value to a static value.
+    // The datasheet is unclear on how unsigned 8-bit samples are scaled,
+    // but I am assuming that TOP=127 so...
+    // r = ( (v/10) / 1.0 ) * 128
+    // Since V is scaled by 1/10 and compared to the 1V reference
+
+    // To save integer precision we algebraically change the order of operation...
+    uint8_t vx10 = (r * 100 ) / 128;
+
+    return vx10;
+}
+
 //  Disable unused peripherals to save power
 
 void prr_init() {
 
-    // Disable everything but the LCD & RTC
+    // Disable everything we don't ever use
 
     // Disabling RTC does not noticeably reduce power
 
@@ -308,13 +483,14 @@ void prr_init() {
 
 
     // These following lines reduce power consumption during active mode
-    // I do not understand why there are separate registers for the different ports.
-    PR.PRPA = PR_ADC_bm | PR_AC_bm;
-    PR.PRPB = PR_ADC_bm | PR_AC_bm;
+
     PR.PRPC = PR_TWI_bm | PR_USART0_bm | PR_SPI_bm | PR_HIRES_bm | PR_TC1_bm | PR_TC0_bm;
     PR.PRPE = PR_TWI_bm | PR_USART0_bm | PR_SPI_bm | PR_HIRES_bm | PR_TC1_bm | PR_TC0_bm;
 
+
 }
+
+
 
 // Disable JTAG interface as per 4.18.6
 // Note that this does not seem to save any power, but it couldn't hurt neither.
@@ -1494,39 +1670,8 @@ void rx8900_reset() {
 
 }
 
-void digitPatternUntilPressed() {
-    // Show a marching countdown pattern until button pressed...
-    // TOOD: we will load UTC time during this step
 
-    uint8_t n=9;
-    uint8_t d=11;
-
-
-    do {
-
-        clearLCD();
-        digitShow( d , n );
-
-        sleep_cpu();        // We will wake on next second, or when switch changes state
-
-        if (n==0) {
-            n=9;
-            } else {
-            n--;
-        }
-
-        if (d==0) {
-            d=11;
-            } else {
-            d--;
-        }
-
-    } while ( !triggerPinPresent() );     // Repeat until pin pressed
-}
-
-
-
-void figure8PatternUntilReleased() {
+void figure8PatternUntilTriggerReleased() {
     // Show figure 8 pattern until pin pulled
 
     // TODO: unroll this for efficiency
@@ -1552,56 +1697,10 @@ void figure8PatternUntilReleased() {
 
 }
 
-// Check if RX8900 considers 00 as a leap year
-
-void leaptester() {
-
-    rx8900_reset();
-
-    rx8900_setDate( 0  , 2 , 28 );
-
-    rx8900_setTime( 23 , 59 , 50 );
-
-
-    while (1) {
-
-        showNowD( rx8900_getDate() );
-        showNowHMSx( rx8900_getTime() );
-
-        sleep_cpu();
-
-
-    }
-
-
-}
-
-
-void contrastTest() {
-
-    // Contrast test pattern
-    clearLCD();
-    showNowD( 123456 );
-    showNowH( 99 );
-    showNowM( 88 );
-    showNowS (77 );
-    char contrast =0;
-    while (1) {
-          contrast+=32;
-
-        lcd_set_contrast( contrast );
-        showNowD( 127+ contrast );
-
-        sleep_cpu();
-
-
-    }
-
-}
 
 // Look like a normal clock
 // Read current time from RTC and show on the display
-// INdicates clock time with blinking decimal point on left module and colon on right module
+// Indicates clock time with blinking decimal point on left module and colon on right module
 
 static void showClockTime( rx8900_time_regs_block_t *time_now ) {
 
@@ -1647,25 +1746,18 @@ void batterydescending() {
     };
 }
 
-void batteryemptyblink() {
+// Shows the little battery icons with just thier
+// bottom segment lit to express thier emptyness
 
-    battSegOn(0);       // Outline always on
+void showEmptyBatteryIcon() {
 
-    while (1) {
+    battSegOn(0);       // Outline
+    battSegOn(3);       // Bottom segment
 
-        battSegOn(3);
-        sleep_cpu();
-
-
-        battSegOff(3);
-        sleep_cpu();
-
-
-
-    };
 }
 
 void blink_lcd_forever() {
+
     while (1) {
 
         lcd_blank();
@@ -1728,9 +1820,23 @@ void eepromErrorMode( uint8_t code ) {
 
 }
 
+// Show blinking battery icons
+// Draws <3uA @ 2.4V
+
+void low_battery_mode() {
+
+    clearLCD();
+    showEmptyBatteryIcon();
+    blink_lcd_forever();
+
+    __builtin_unreachable();
+
+
+}
+
 // Blink "999999 235959" forevermore
 // Prevents unscrupulous sellers from trying to
-// pass offr TSLs that have rolled over as less used
+// pass off TSLs that have rolled over as less used
 // than they really are.
 
 void longNowMode() {
@@ -1761,15 +1867,36 @@ void showDashes() {
 // and happens smoothly 1 second after the pin is pulled.
 
 void showZeros() {
-
     showNowD( 000000 );
     showNowHMS( 0 , 0 , 0 );
 }
 
+// This should trigger when the battery voltage hits about 2.4 volts
+// The XMEGA can run down to 1.6V and the RX8900 can run down to
+// 1.6V with temp compensation down to 2V, so this should give us
+// plenty of notice
 
+#define LOW_BATTERY_VOLTAGE_X10 23
 
+// Returns 1 if battery voltage reading less than LOW_BATTERY_VOLTAGE_X10
+// Note that this uses about 200x normal power, so call sparingly
+// which is fine because battery voltages change slowly.
 
-// Returns when we hit 999999 days = 2739.72329 years.
+static inline uint8_t check_low_battery() {
+
+    // Turn on ADC, take a reading of Vcc, turn off Vcc
+    // Returns Vcc * 10, so 2.4V would return 24
+    // Note that due probably to rounding, the Vcc reading
+    // is about 0.1V lower than the actual battery voltage.
+
+    uint8_t vx10 = adc_read_vcc_x_10();
+
+    return vx10 <= LOW_BATTERY_VOLTAGE_X10 ;
+
+}
+
+// Returns when we hit 999999 days 23:59:59 = 2737.90926 years years.
+// https://www.google.com/search?q=1000000+days+-+1+second
 
 void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
@@ -1777,8 +1904,6 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
     uint8_t so = s - (st*10);   // seconds ones place
 
     while (d<1000000 ) {
-
-        // TODO: Check battery voltage here
 
         showNowD( d );
 
@@ -1805,6 +1930,16 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
                     }
                     so=0;
                     st++;
+
+                        #warning testing
+                        if ( check_low_battery() ) {
+
+                            // Show blinking battery icon. Never returns.
+                            low_battery_mode();
+                            __builtin_unreachable();
+
+                        }
+
                 }       // s
 
                 st=0;
@@ -1816,6 +1951,22 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
         }               // h
         h=0;
         d++;
+
+
+        // First check for low voltage
+        // This takes a lot of power so only do it once every 8 days
+        // Starting at the beginning of day 1 when things have started to settle down
+        // and we have recovered from the traumatic flashbulb currents
+
+        if ( (d & 0x07) == 0x01 ) {
+            if (  check_low_battery() ) {
+
+                // Show blinking battery icon. Never returns.
+                low_battery_mode();
+                __builtin_unreachable();
+
+            }
+        }
 
         if ( (d & 0x7f) == 0x00 ) {     // Every 128 days....
 
@@ -1852,7 +2003,14 @@ int main(void)
 
     initDiagnosticPins();             // Set pullups on the 2 extra pins on the ISP just to keep them from floating. We can also uses these for diagnostics and programming.
 
-    // Disable unused peripherals to save power
+
+    // Set up the ADC registers that we will use for low battery checks
+    // This must happen before we shut it down since we can't access registers
+    // when it is powered down
+    adc_init();
+    adc_powerdown_adc_and_ac();
+
+    // Disable all other unused peripherals to save power
     prr_init();
     disableJTAG();
 
@@ -1957,6 +2115,15 @@ int main(void)
             clearLCD();
 
         }
+
+    }
+
+
+    if ( check_low_battery() ) {
+
+        // Show blinking battery icon. Never returns.
+        low_battery_mode();
+        __builtin_unreachable();
 
     }
 
@@ -2169,7 +2336,7 @@ int main(void)
             // TODO: Check for low battery in here?
             // TODO: Make more power efficient?
 
-            figure8PatternUntilReleased();
+            figure8PatternUntilTriggerReleased();
 
         }
 
