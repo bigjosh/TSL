@@ -239,7 +239,7 @@ This is handy for verifying the correct time was programmed.
 
 There are two test pins on the 6-pin ISP connector on the board labeled `B` and `T`. They are internally pulled up, so you connect them the to the ground pin (labeled `G`) to activate them.
 
-They are only checked at start up. You can force a start up by grounding the RESET pin (labeled `C`) to reset the unit and then quickly (you have the 1 second warmup) ground one of the test pins.
+The reset pins are checked at start up and at the end of each minute. 
 
 #### `B` Pin
 

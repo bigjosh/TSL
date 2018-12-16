@@ -751,6 +751,12 @@ inline void showNowH(  uint8_t h ) {
 
 void initDiagnosticPins() {
 
+    // Map PORTC to Virtual Port 0
+    // Since we will be Accessing these every minute
+    // to check for diagnostic pins, this will make those accesses much faster.
+
+    PORTCFG.VPCTRLA = PORTCFG_VP0MAP_PORTC_gc;
+
     // These appear on ISP pins 3 & 4 respectively
 
     PORTC.PIN2CTRL = PORT_OPC_PULLUP_gc ;
@@ -785,14 +791,31 @@ void testPinBOut0() {
 
 inline uint8_t diagnosticPinBGrounded() {
 
-    return ( ! (PORTC.IN & _BV(2) ));
+    return ( ! (VPORT0.IN & _BV(2) ));
 
 }
 
 
 inline uint8_t diagnosticPinTGrounded() {
 
-    return ( ! (PORTC.IN & _BV(3) ));
+    return ( ! (VPORT0.IN & _BV(3) ));
+
+}
+
+// Returns 1 if either diagnostic pin is grounded
+// The VPORT makes this compile down nicely...
+
+/*
+
+    2374:	92 9b       	sbis	0x12, 2	; 18
+    2376:	02 c0       	rjmp	.+4      	; 0x237c <main+0xad0>
+    2378:	93 99       	sbic	0x12, 3	; 18
+    237a:	fc c2       	rjmp	.+1528   	; 0x2974 <main+0x10c8>
+    
+*/
+
+inline uint8_t checkDiagnosticPins() {
+    return diagnosticPinBGrounded() || diagnosticPinTGrounded();
 
 }
 
@@ -1899,6 +1922,33 @@ static inline uint8_t check_low_battery() {
 
 }
 
+
+
+// From: https://www.mikrocontroller.net/topic/217451
+
+void softwareReset() {
+    // ::::::::::::::::::::::::::::::::::::::::::::::::
+    // CCP: Configuration Change Protection
+    // ::::::::::::::::::::::::::::::::::::::::::::::::
+    //for general: ref manual p. 12 (3.12)
+    //ref manual p. 13 (3.14.1)
+    //CCP - Configuration Change Protection Register
+    //IOREG: Protected IO register
+    //
+    //enabling to write into protectet area
+    CCP = CCP_IOREG_gc;
+    //All interrupts are ignored during the next 4 CPU
+    //instruction cycles from now
+
+
+    //CTRL bit is protected by Configuration Change Protection
+    //Software-Reset ausführen (bit0 setzen)
+    //see manual p. 109 (9.5.2: CTRL - Reset Control Register)
+    RST.CTRL =  RST_SWRST_bm;
+
+    __builtin_unreachable();
+}
+
 // Returns when we hit 999999 days 23:59:59 = 2737.90926 years years.
 // https://www.google.com/search?q=1000000+days+-+1+second
 
@@ -1939,6 +1989,12 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
                 st=0;
                 m++;
+
+                if (checkDiagnosticPins()) {        // If either of the diagnostic pins are grounded on the hour...
+
+                    softwareReset();                // Reset, which will jump to diagnostic display
+
+                }
             }           // m
 
             m=0;
@@ -1953,7 +2009,7 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
         // Starting at the beginning of day 1 when things have started to settle down
         // and we have recovered from the traumatic flashbulb currents
 
-        if ( (d & 0x07) == 0x01 ) {
+        if ( (d & 0x07) == 0x01 ) {     // Every 8 days, starting on day0->day1 transition
             if (  check_low_battery() ) {
 
                 // Show blinking battery icon. Never returns.
@@ -2037,10 +2093,10 @@ void showPinBPhase3() {
 
 }
 
-// Diagnostic display when Pin B is grounded durring startup 
+// Diagnostic display when Pin B is grounded durring startup
 
 void showPinT() {
-    
+
     if ( load_trigger_flag_from_EEPROM() ) {
 
         rx8900_time_regs_block_t trigger_time_reg_block;
@@ -2054,9 +2110,9 @@ void showPinT() {
     } else {
 
         showNoTrig();
-    }    
-    
-}    
+    }
+
+}
 
 int main(void)
 {
@@ -2166,10 +2222,10 @@ int main(void)
         // Left colon indicates trigger time
         // Right decimal point means trigger has been pulled
 
-        showPinT();        
-        sleep_cpu();        
+        showPinT();
+        sleep_cpu();
         clearLCD();
-        
+
     }
 
 
