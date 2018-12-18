@@ -71,7 +71,7 @@ int main( int argc , char **argv )
 	write_bcd(f, tm_gmt->tm_hour);
 	write_bcd(f,                1);					// Weeks. We don't use, but must be a sane value 1-7.
 	write_bcd(f, tm_gmt->tm_mday);
-	write_bcd(f, tm_gmt->tm_mon);
+	write_bcd(f, tm_gmt->tm_mon+1);					// gmtime() month returned by gmtime is 0-based! But not day?!
 	write_bcd(f, y % 100 );							// 2 digit year
 	write_bcd(f, ci );								// Century intelock 
 	
@@ -86,7 +86,7 @@ int main( int argc , char **argv )
 	write_bcd(f, tm_gmt->tm_hour);
 	write_bcd(f,1);									// Weeks. We don't use, but must be a sane value 1-7.
 	write_bcd(f, tm_gmt->tm_mday);
-	write_bcd(f, tm_gmt->tm_mon);
+	write_bcd(f, tm_gmt->tm_mon+1);					// gmtime() month returned by gmtime is 0-based! But not day?!
 	write_bcd(f, tm_gmt->tm_year % 100);			// 2 digit year
 	write_bcd(f, (tm_gmt->tm_year - 2000) / 50);								// Century intelock 
 
