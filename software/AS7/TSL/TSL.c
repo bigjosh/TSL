@@ -749,7 +749,7 @@ inline void showNowH(  uint8_t h ) {
 // Test pins are label T & B on the ISP6 connector
 // They are pulled up internally
 
-void initDiagnosticPins() {
+void diagnostic_init_Pins() {
 
     // Map PORTC to Virtual Port 0
     // Since we will be Accessing these every minute
@@ -763,40 +763,40 @@ void initDiagnosticPins() {
     PORTC.PIN3CTRL = PORT_OPC_PULLUP_gc ;
 }
 
-void initTestPinTOutput() {
+void diagnostic_init_PinT_OutputMode() {
     PORTC.DIRSET = _BV(3);
 }
 
-void testPinTOut1() {
+void diagnostic_out_PinT_1() {
     PORTC.OUTSET = _BV(3);
 }
 
-void testPinTOut0() {
+void diagnostic_out_PinT_0() {
     PORTC.OUTCLR = _BV(3);
 }
 
-void initTestPinBOutput() {
+void diagnostic_init_TestPinB_OutputMode() {
     PORTC.DIRSET = _BV(2);
 }
 
-void testPinBOut1() {
+void  diagnostic_out_PinB_1() {
     PORTC.OUTSET = _BV(2);
 }
 
-void testPinBOut0() {
+void  diagnostic_out_PinB_0() {
     PORTC.OUTCLR = _BV(2);
 }
 
 
 
-inline uint8_t diagnosticPinBGrounded() {
+inline uint8_t diagnostic_in_PinB_Grounded() {
 
     return ( ! (VPORT0.IN & _BV(2) ));
 
 }
 
 
-inline uint8_t diagnosticPinTGrounded() {
+inline uint8_t diagnostic_in_PinT_Grounded() {
 
     return ( ! (VPORT0.IN & _BV(3) ));
 
@@ -811,11 +811,11 @@ inline uint8_t diagnosticPinTGrounded() {
     2376:	02 c0       	rjmp	.+4      	; 0x237c <main+0xad0>
     2378:	93 99       	sbic	0x12, 3	; 18
     237a:	fc c2       	rjmp	.+1528   	; 0x2974 <main+0x10c8>
-    
+
 */
 
-inline uint8_t checkDiagnosticPins() {
-    return diagnosticPinBGrounded() || diagnosticPinTGrounded();
+inline uint8_t diagnostic_in_EitherPin_Grounded() {
+    return diagnostic_in_PinB_Grounded() || diagnostic_in_PinT_Grounded();
 
 }
 
@@ -1923,6 +1923,41 @@ static inline uint8_t check_low_battery() {
 }
 
 
+// Used for checking accuracy against a timebase
+// Wait for T pin to go low, then resets the RTC to sync
+// Then the B pin toggles at 1Hz forever
+// Note that this is not meant to be an exact sync
+// but instead to just get the pulse edges close to each
+// other so that are easy to compare on the scope screen.
+// It is changes in the relative offset that matter.
+
+
+void accuracyTester() {
+
+    // We will output on pin T
+    diagnostic_init_PinT_OutputMode();
+
+    // Wait for low going pulse form timebase on pin B
+    while (!diagnostic_in_PinB_Grounded());
+
+
+    // Reset RTC seconds counter
+    rx8900_reset();
+
+    while(1) {
+
+        // Start high
+        diagnostic_out_PinT_1();
+        sleep_cpu();
+
+        // Go low on output
+        // Falling edge is what we time to
+        diagnostic_out_PinT_0();
+
+    }
+
+}
+
 
 // From: https://www.mikrocontroller.net/topic/217451
 
@@ -1990,7 +2025,7 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
                 st=0;
                 m++;
 
-                if (checkDiagnosticPins()) {        // If either of the diagnostic pins are grounded on the hour...
+                if (diagnostic_in_EitherPin_Grounded()) {        // If either of the diagnostic pins are grounded on the hour...
 
                     softwareReset();                // Reset, which will jump to diagnostic display
 
@@ -2130,7 +2165,7 @@ int main(void)
 
     USI_TWI_Master_Initialise();        // Init TWI pins to pullup.
 
-    initDiagnosticPins();             // Set pullups on the 2 extra pins on the ISP just to keep them from floating. We can also uses these for diagnostics and programming.
+    diagnostic_init_Pins();             // Set pullups on the 2 extra pins on the ISP just to keep them from floating. We can also uses these for diagnostics and programming.
 
 
     // Set up the ADC registers that we will use for low battery checks
@@ -2192,7 +2227,7 @@ int main(void)
 
     // Diagnostic functions
 
-    while (diagnosticPinBGrounded()) {
+    while (diagnostic_in_PinB_Grounded()) {
 
         // Test pin B will show the current time in the RTC - even if it has not been set or reset yet
         // Right colon indicates RTC time
@@ -2216,7 +2251,7 @@ int main(void)
 
 
 
-    while (diagnosticPinTGrounded()) {
+    while (diagnostic_in_PinT_Grounded()) {
 
         // Test pin T will show the current trigger time - even if it has not been set yet
         // Left colon indicates trigger time
