@@ -146,6 +146,27 @@ void enable_rtc_ulp() {
     //////////////////////////////////////////////////////////////////////
 }
 
+// Enable the RTC running off of the internal 32KHz internal oscillator.
+
+void enable_rtc_32kintosc() {
+
+    //////////////////////////////////////////////////////////////////////
+    //CLK.RTCCTRL
+    //     7       6       5       4       3       2       1       0
+    // |   -   |   -   |   -   |   -   |      RTCSRC[2:0]     |  RTCEN  |
+    //     0       0       0       0       0       0       0       0
+    // LCD Runs off the RTC
+
+
+    // Enable RTC, source from 32kHz internal ULP osc
+    CLK.RTCCTRL = CLK_RTCSRC_RCOSC_gc | CLK_RTCEN_bm;
+
+    // By default "1kHz from 32kHz internal ULP oscillator, but The LCD will always use the non-prescaled 32kHz oscillator output as clock source"
+
+
+    //////////////////////////////////////////////////////////////////////
+}
+
 void enable_rtc_TOSC1_32K() {
 
     //////////////////////////////////////////////////////////////////////
@@ -553,6 +574,71 @@ void disableUnusedIOPins() {
 
     // PORTD.0 is connected to flash EFT. It has driven LOW.
     // PORTD.1 is connected to flash EFT. It has driven LOW.
+
+
+    // PORTG and PORTM are alternate functions on the LCD pins
+    // Do we need to disable them when LCD function is in use?
+    // I really could not find out from the datasheet so better safe than
+    // sorry since these pins have intermediate voltages on them all the time
+    // from the LCD phases
+
+    PORTG.PIN0CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN1CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN2CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN3CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN4CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN5CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN6CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTG.PIN7CTRL = PORT_ISC_INPUT_DISABLE_gc;
+
+    PORTM.PIN0CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN1CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN2CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN3CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN4CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN5CTRL = PORT_ISC_INPUT_DISABLE_gc;
+    PORTM.PIN7CTRL = PORT_ISC_INPUT_DISABLE_gc;
+
+}
+
+
+
+void pullUpAllIOPins() {
+
+
+
+    PORTB.PIN0CTRL = PORT_OPC_PULLUP_gc;
+    PORTB.PIN1CTRL = PORT_OPC_PULLUP_gc;
+    // PORTB.2 is connected to FOUT from the RX8900. It is input with pn change interrupt.
+    PORTB.PIN3CTRL = PORT_OPC_PULLUP_gc;
+    PORTB.PIN4CTRL = PORT_OPC_PULLUP_gc;
+    PORTB.PIN5CTRL = PORT_OPC_PULLUP_gc;
+    PORTB.PIN6CTRL = PORT_OPC_PULLUP_gc;
+    // PORTB.2 is connected to FOE to the RX8900. It is driven high. .
+
+
+    // PORTC.0 is connected to SDA on RX8900. It has pullup.
+    // PORTC.1 is connected to SCL on RX8900. It has pullup.
+    // PORTC.2 is connected to PIN3 on ISP. It has pullup.
+    // PORTC.3 is connected to PIN4 on ISP. It has pullup.
+    PORTC.PIN0CTRL = PORT_OPC_PULLUP_gc;
+    PORTC.PIN1CTRL = PORT_OPC_PULLUP_gc;
+    PORTC.PIN2CTRL = PORT_OPC_PULLUP_gc;
+    PORTC.PIN3CTRL = PORT_OPC_PULLUP_gc;
+
+    PORTC.PIN4CTRL = PORT_OPC_PULLUP_gc;
+    PORTC.PIN5CTRL = PORT_OPC_PULLUP_gc;
+    PORTC.PIN6CTRL = PORT_OPC_PULLUP_gc;
+    PORTC.PIN7CTRL = PORT_OPC_PULLUP_gc;
+
+    // PORTC.7 is connected to the trigger switch. It has pullup until pin is pulled, then input disabled.
+
+    // PORTD.0 is connected to flash EFT. It has driven LOW.
+    // PORTD.1 is connected to flash EFT. It has driven LOW.
+
+
+    PORTD.PIN0CTRL = PORT_OPC_PULLDOWN_gc;
+    PORTD.PIN1CTRL = PORT_OPC_PULLDOWN_gc;
 
 
     // PORTG and PORTM are alternate functions on the LCD pins
@@ -1868,7 +1954,7 @@ void badInterruptMode() {
 
 }
 
-// Catch any errant interrupts 
+// Catch any errant interrupts
 // These should never ever happen, but if they
 // do happen we want to know becuase something is
 // wrong
@@ -2230,31 +2316,13 @@ int main(void)
     // Enable the ultra low power XMEGA clock
     // We will drive the LCD from this
 
-    enable_rtc_ulp();
+    enable_rtc_32kintosc();
 
     //enable_rtc_32Kxtal();     // There is provision to install this on the PCB. Saves 0.3uA over ULP. Worth the savings for the extra part?
 
-    disableUnusedIOPins();      // Save a little power by disabling the input buffers on all unused pins
-
-    triggerPinDisable();        // Disable the input buffer on the trigger pin. We will enable (and this disable it) if we actually need it to read the trigger pin.
-
-    USI_TWI_Master_Initialise();        // Init TWI pins to pullup.
-
-    diagnostic_init_Pins();             // Set pullups on the 2 extra pins on the ISP just to keep them from floating. We can also uses these for diagnostics and programming.
-
-
-    // Set up the ADC registers that we will use for low battery checks
-    // This must happen before we shut it down since we can't access registers
-    // when it is powered down
-    adc_init();
-    adc_powerdown_adc_and_ac();
-
-    // Disable all other unused peripherals to save power
-    prr_init();
-    disableJTAG();
-
 	// Initialize the LCD Controller
 	lcd_init();
+
 
 	// Enable LOW priority interrupts (we only use low)
     CPU_CCP = CCP_IOREG_gc;             // TODO: I think this is not needed?
@@ -2264,13 +2332,14 @@ int main(void)
 
 	sleep_enable();         // This chip needs you to tell it that it is ok to sleep before the sleep instruction will actually work
 
-    initFlash();            // Enable output on the pins that control the transistors that flash the flash LEDs
+//    initFlash();            // Enable output on the pins that control the transistors that flash the flash LEDs
 
     output1onFOEpin();      // Enable the 1Hz output from the RTC via its Frequency Output Enable pin
 
     FOUT_in_pin_enable();   // Enable an interrupt on the falling edge of the 1Hz FOUT coming from the RTC
                             // Setting a new time sets FOUT low, and then it goes low again on each new seconds update.
 
+    USI_TWI_Master_Initialise();    // Ste the pullups on the TWO going to the RX8900 so they will be ready
 
     sei();                  // Note that our ISRs are empty, we only use interrupts to wake from sleep.
 
@@ -2278,6 +2347,7 @@ int main(void)
 
     // WARNING: testing only
     // Show the reset flags for diagnostics
+
     showAndClearResetBits();
 
     //showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
@@ -2288,7 +2358,27 @@ int main(void)
 
                             // Note that we can not use the interrupt to wake us from sleep here because
                             // the RTC is not sending it yet!
+    rx8900_fout_1Hz();
+    sleep_cpu();
 
+
+    clearLCD();
+    
+ 
+
+  //  pullUpAllIOPins();
+
+    uint32_t x=0;
+
+    while (1) {
+
+        showNowD(x);
+        x++;
+        sleep_cpu();
+
+    }
+
+/*
 
     // Now that the oscillator is settled, we set the FOUT to  1Hz since we will need that
     // for waking us from sleep no matter what happens next...
@@ -2298,6 +2388,7 @@ int main(void)
     rx8900_open_MOS();      // Open the switch that connects Vcc to Vbat. This way when the person pulls the battery out, the
     // capacitor connected to Vbat will not be connected to the XMEGA and will only be used to power the RTC
     // This also disables voltage detection because it seems you can not open the switch with it enabled.
+*/
 
     clearLCD();
 
@@ -2707,6 +2798,8 @@ int main(void)
     longNowMode();
 
     __builtin_unreachable();
+
+
 }
 
 
