@@ -204,6 +204,13 @@ Indicates that the trigger was more than 1 million days (~2740 years) ago so we 
 
 The idea here is to avoid problems of people trying to ebay old TSL units that have rolled over by misrepresenting their true age. 
 
+### Bad Interrupt Mode
+
+Shows "bAd Int" blinking forever.
+
+This means that an unexpected interrupt happened. This would be very unexpected.  
+
+The only interrupts that are ever enabled are for the trigger pin and the 1Hz FOUT tick coming from the RTC, and we turn off the trigger pin after the pin is pulled.
 
 ### EEPROM Error Mode
 
