@@ -2,6 +2,7 @@
 *.d
 
 Debug/
+Release/
 
 # Diptrace temp files
 *~
