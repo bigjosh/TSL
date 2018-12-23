@@ -2,5 +2,5 @@ REM Fix the offset number on the line below so that when a TSL is done being pro
 tsl-make-block tsl-eeprom-block.bin 6
 
 REM Fix the path below to point to your `atprogram.exe`
-"C:\Program Files (x86)\Atmel\Studio\7.0\atbackend\atprogram.exe" --tool avrispmk2 --interface pdi --device atxmega128b3 program --flash --chiperase --format hex --verify --file tsl.hex erase --eeprom program --eeprom --format bin --verify --file tsl-eeprom-block.bin write --fuses --offset 4 --values EE
+"C:\Program Files (x86)\Atmel\Studio\7.0\atbackend\atprogram.exe" --tool avrispmk2 --interface pdi --device atxmega128b3 program --flash --chiperase --format hex --verify --file tsl.hex erase --eeprom program --eeprom --format bin --verify --file tsl-eeprom-block.bin write --fuses --values FFFFFFFFEEF7
 

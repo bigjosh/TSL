@@ -49,3 +49,28 @@ First the batch file uses the `tsl-make-block` to create a binary file to be pro
 
 Next the batch file uses the `atprogram` command to actually download the firmware flash image and the newly created EEPROM data block into the XMEGA on the TSL.  The `atprogram` is equivalent to `avrdude` but it written by Atmel and runs on Windows and uses the Atmel drivers. We used `atprogram`  because `avrdude` can have problems talking to an `MkII` when Atmel Studio is installed because of USB driver conflicts.  
 
+#### Fuses
+
+The `atrprogram` command sets the fuses like so...
+
+JTAGUSERID = 0xFF
+WDWP = <none selected>
+WDP = <none selected>
+BOOTRST = APPLICATION
+TOSCSEL = XTAL
+BODPD = DISABLED
+RSTDISBL = [X]
+SUT = 0MS
+WDLOCK = [ ]
+JTAGEN = [X]
+BODACT = DISABLED
+EESAVE = [X]
+BODLVL = 1V6
+
+FUSEBYTE0 = 0xFF (valid)
+FUSEBYTE1 = 0xFF (valid)
+FUSEBYTE2 = 0xFF (valid)
+FUSEBYTE4 = 0xEE (valid)
+FUSEBYTE5 = 0xF7 (valid)
+
+
