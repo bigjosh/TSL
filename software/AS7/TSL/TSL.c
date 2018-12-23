@@ -881,9 +881,6 @@ inline uint8_t triggerPinPresent() {
 
 EMPTY_INTERRUPT(PORTC_INT0_vect);       // Trigger pin ISR. We don't care about ISR, just want to have the interrupt to wake us up.
 
-
-
-
 // Pattern to show when we run out of digits in 2300 years...
 
 void showGoodbye() {
@@ -1869,6 +1866,15 @@ void badInterruptMode() {
 
     __builtin_unreachable();
 
+}
+
+// Catch any errant interrupts 
+// These should never ever happen, but if they
+// do happen we want to know becuase something is
+// wrong
+
+ISR(BADISR_vect) {
+    badInterruptMode();
 }
 
 // Show the reason for last reset for 5 seconds and clear bits for next time
