@@ -7,14 +7,11 @@ Project("{54F91283-7BC4-4236-8FF9-10F437C3AD48}") = "TSL", "TSL\TSL.cproj", "{09
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|AVR = Debug|AVR
 		Release|AVR = Release|AVR
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{099A8549-A878-42D4-8744-97E3EBF42D07}.Debug|AVR.ActiveCfg = Debug|AVR
-		{099A8549-A878-42D4-8744-97E3EBF42D07}.Debug|AVR.Build.0 = Debug|AVR
-		{099A8549-A878-42D4-8744-97E3EBF42D07}.Release|AVR.ActiveCfg = Release|AVR
-		{099A8549-A878-42D4-8744-97E3EBF42D07}.Release|AVR.Build.0 = Release|AVR
+		{099A8549-A878-42D4-8744-97E3EBF42D07}.Release|AVR.ActiveCfg = Debug|AVR
+		{099A8549-A878-42D4-8744-97E3EBF42D07}.Release|AVR.Build.0 = Debug|AVR
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

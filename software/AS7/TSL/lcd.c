@@ -34,43 +34,7 @@ inline void lcd_clear_pixel(uint8_t pix_com, uint8_t pix_seg) {
 }
 
 
-// Map 7 segments A-G to internal representation bits
-// A=0b00000001, B=0b00000010, etc
-// Just luck that 7 segments fits into an 8 bit byte
-
-#define LCD_SEG_BIT( letter ) ( 1 << (letter - 'A') )
-
-#define SEG_A LCD_SEG_BIT('A')
-#define SEG_B LCD_SEG_BIT('B')
-#define SEG_C LCD_SEG_BIT('C')
-#define SEG_D LCD_SEG_BIT('D')
-#define SEG_E LCD_SEG_BIT('E')
-#define SEG_F LCD_SEG_BIT('F')
-#define SEG_G LCD_SEG_BIT('G')
-
-// Which segments A-G do we turn on for each of the displayed chars 0-9
-
-/*
-// This is rightside up font
-
-const uint8_t lcd_font[] = {
-    SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F ,         // 0
-    SEG_B | SEG_C ,                                         // 1
-    SEG_A | SEG_B | SEG_G | SEG_E | SEG_D ,                 // 2
-    SEG_A | SEG_B | SEG_G | SEG_C | SEG_D ,                 // 3
-    SEG_F | SEG_G | SEG_B | SEG_C ,                         // 4
-    SEG_A | SEG_F | SEG_G | SEG_C | SEG_D ,                 // 5
-    SEG_A | SEG_C | SEG_D | SEG_E | SEG_F | SEG_G ,         // 6
-    SEG_A | SEG_B | SEG_C ,                                 // 7
-    SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F | SEG_G , // 8
-    SEG_A | SEG_B | SEG_C | SEG_D | SEG_F | SEG_G ,         // 9
-};
-
-*/
-
-// This is upside down font
-
-const uint8_t lcd_font[] = {
+const uint8_t lcd_font_digits[] = {
     SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F ,         // 0
     SEG_E | SEG_F ,                                         // 1
     SEG_A | SEG_B | SEG_G | SEG_E | SEG_D ,                 // 2
@@ -82,6 +46,7 @@ const uint8_t lcd_font[] = {
     SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F | SEG_G , // 8
     SEG_A | SEG_E | SEG_C | SEG_D | SEG_F | SEG_G ,         // 9
 };
+
 
 const uint8_t lcd_font_char_dash = { SEG_G };                                 // '-'
 const uint8_t lcd_font_char_c    = { SEG_G | SEG_B | SEG_A };                 // c
@@ -103,6 +68,12 @@ const uint8_t lcd_font_char_G    = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F  }; /
 
 const uint8_t lcd_font_char_V    = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_E }; // V (ok, not really)
 const uint8_t lcd_font_char_l    = { SEG_C | SEG_B };                         // l
+
+const uint8_t lcd_font_char_b    = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_G }; // b
+const uint8_t lcd_font_char_A    = { SEG_C | SEG_B | SEG_D | SEG_E | SEG_G | SEG_F };   // A
+const uint8_t lcd_font_char_d    = { SEG_G | SEG_B | SEG_A | SEG_F | SEG_E};  // d
+const uint8_t lcd_font_char_U    = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_E};  // d
+
 
 // Map LCD seg pins to MCU seg pins (set by PCB layout)
 
@@ -298,7 +269,7 @@ const lcd_visible_segment  digitmap[][7] = {
 
 void digitShow( uint8_t d,  uint8_t n ) {
 
-    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
 
     for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
 
@@ -317,7 +288,7 @@ void digitShow( uint8_t d,  uint8_t n ) {
 
 void digitOn(  uint8_t n , uint8_t d ) {
 
-    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
 
     for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
 
@@ -349,6 +320,10 @@ void showDash(uint8_t n ) {
 
 }
 
+void lcd_show_fontchar( uint8_t segs , uint8_t d ) {
+    segmentsOn( segs , d );
+}
+
 void showNoTrig() {
     segmentsOn( lcd_font_char_n , 11 );
     segmentsOn( lcd_font_char_o , 10 );
@@ -372,6 +347,42 @@ void showClocError() {
     segmentsOn( lcd_font_char_r , 3 );
     segmentsOn( lcd_font_char_o , 2 );
     segmentsOn( lcd_font_char_r , 1 );
+}
+
+void showSetCloc() {
+
+    segmentsOn( lcd_font_char_S , 11 );
+    segmentsOn( lcd_font_char_E , 10 );
+    segmentsOn( lcd_font_char_t ,  9 );
+
+
+    segmentsOn( lcd_font_char_c ,  5 );
+    segmentsOn( lcd_font_char_L ,  4 );
+    segmentsOn( lcd_font_char_o ,  3 );
+    segmentsOn( lcd_font_char_c ,  2 );
+
+}
+
+void showReset() {
+
+    segmentsOn( lcd_font_char_r , 11 );
+    segmentsOn( lcd_font_char_E , 10 );
+    segmentsOn( lcd_font_char_S ,  9 );
+    segmentsOn( lcd_font_char_E ,  8 );
+    segmentsOn( lcd_font_char_t ,  7 );
+
+}
+
+
+
+void showbAdint() {
+    segmentsOn( lcd_font_char_b , 11 );
+    segmentsOn( lcd_font_char_A , 10 );
+    segmentsOn( lcd_font_char_d ,  9 );
+
+    segmentsOn( lcd_font_char_i , 5 );
+    segmentsOn( lcd_font_char_n , 4 );
+    segmentsOn( lcd_font_char_t , 3 );
 }
 
 
@@ -429,7 +440,7 @@ void showc2018JOSH() {
 
 void digitOff( uint8_t d,  uint8_t n ) {
 
-    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
 
     for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments in the digit
 
@@ -455,7 +466,7 @@ void digitBlank( uint8_t d ) {
 
 void displaydigit( uint8_t d,  uint8_t n , uint8_t onFlag) {
 
-    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
 
     for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
 
@@ -480,7 +491,7 @@ void displaydigit01O() {
     uint8_t n =1;
     uint8_t onFlag = 1;
 
-    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
 
     for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
 
@@ -503,7 +514,7 @@ void displaydigit01F() {
     uint8_t n =1;
     uint8_t onFlag = 0;
 
-    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
 
     for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
 
@@ -526,7 +537,7 @@ void displaydigit02O() {
     uint8_t n =2;
     uint8_t onFlag = 1;
 
-    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
 
     for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
 
@@ -549,7 +560,7 @@ void displaydigit02F() {
     uint8_t n =2;
     uint8_t onFlag = 0;
 
-    uint8_t segementBitsInThisDigit = lcd_font[ n ];
+    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
 
     for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
 

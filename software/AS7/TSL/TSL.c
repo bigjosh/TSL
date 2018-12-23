@@ -775,7 +775,7 @@ void diagnostic_out_PinT_0() {
     PORTC.OUTCLR = _BV(3);
 }
 
-void diagnostic_init_TestPinB_OutputMode() {
+void diagnostic_init_PinB_OutputMode() {
     PORTC.DIRSET = _BV(2);
 }
 
@@ -1861,6 +1861,75 @@ void low_battery_mode() {
 
 }
 
+void badInterruptMode() {
+
+    clearLCD();
+    showbAdint();
+    blink_lcd_forever();
+
+    __builtin_unreachable();
+
+}
+
+// Show the reason for last reset for 5 seconds and clear bits for next time
+// Bits described in XMEGA B Manual 9.5.1
+
+void showAndClearResetBits() {
+
+    // Grab current reset bits
+    uint8_t t = RST.STATUS;
+
+    // Clear all reset bits
+    RST.STATUS = RST_PORF_bm |  RST_EXTRF_bm | RST_BORF_bm | RST_WDRF_bm | RST_PDIRF_bm | RST_SRF_bm | RST_SDRF_bm ;
+
+    clearLCD();
+
+    showReset();
+
+    // Power on
+    if ( t & RST_PORF_bm ) {
+        lcd_show_fontchar( lcd_font_char_P , 0 );
+    } else {
+        lcd_show_fontchar( lcd_font_char_dash , 0 );
+    }
+
+    // Ext reset pin
+    if ( t & RST_EXTRF_bm ) {
+        lcd_show_fontchar( lcd_font_char_E , 1 );
+        } else {
+        lcd_show_fontchar( lcd_font_char_dash , 1 );
+    }
+
+    // Brown out
+    if ( t & RST_BORF_bm ) {
+        lcd_show_fontchar( lcd_font_char_b , 2 );
+        } else {
+        lcd_show_fontchar( lcd_font_char_dash , 2 );
+    }
+
+    // PDI programming port reset (`d`ownload)
+    if ( t & RST_PDIRF_bm ) {
+        lcd_show_fontchar( lcd_font_char_d , 3 );
+        } else {
+        lcd_show_fontchar( lcd_font_char_dash , 3 );
+    }
+
+    // Software reset
+    if ( t & RST_SRF_bm ) {
+        lcd_show_fontchar( lcd_font_char_S , 4 );
+        } else {
+        lcd_show_fontchar( lcd_font_char_dash , 4 );
+    }
+
+    // Undefined reset bits
+    if ( t & 0b11000000 ) {
+        lcd_show_fontchar( lcd_font_char_U , 5 );
+        } else {
+        lcd_show_fontchar( lcd_font_char_dash , 5 );
+    }
+
+}
+
 // Blink "999999 235959" forevermore
 // Prevents unscrupulous sellers from trying to
 // pass off TSLs that have rolled over as less used
@@ -2197,18 +2266,21 @@ int main(void)
                             // Setting a new time sets FOUT low, and then it goes low again on each new seconds update.
 
 
-    sei();                  // Note that all our ISR are empty, we only use interrupts to wake from sleep.
+    sei();                  // Note that our ISRs are empty, we only use interrupts to wake from sleep.
 
     // TODO: Find a way to stop ISR from running to save the power wasted in all those pushes and pops
 
+    // WARNING: testing only
+    // Show the reset flags for diagnostics
+    showAndClearResetBits();
 
-    showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
+    //showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
 
-    _delay_ms(1000);        // tSTA RX8900 oscillator stabilization time 1s max at 25C
+    _delay_ms(2000);        // tSTA RX8900 oscillator stabilization time 1s max at 25C
                             // "Please perform initial setting only tSTA (oscillation start time), when the
                             // built-in oscillation is stable."
 
-                            // Note that we can not use the interrupt to wake us from sleep here becuase
+                            // Note that we can not use the interrupt to wake us from sleep here because
                             // the RTC is not sending it yet!
 
 
@@ -2217,11 +2289,9 @@ int main(void)
 
     rx8900_fout_1Hz();
 
-
     rx8900_open_MOS();      // Open the switch that connects Vcc to Vbat. This way when the person pulls the battery out, the
     // capacitor connected to Vbat will not be connected to the XMEGA and will only be used to power the RTC
     // This also disables voltage detection because it seems you can not open the switch with it enabled.
-
 
     clearLCD();
 
@@ -2248,8 +2318,8 @@ int main(void)
         clearLCD();
     }
 
-
-
+//    diagnostic_init_TestPinB_OutputMode();
+//    diagnostic_out_PinB_1();
 
     while (diagnostic_in_PinT_Grounded()) {
 
@@ -2263,6 +2333,12 @@ int main(void)
 
     }
 
+    diagnostic_init_PinB_OutputMode();
+    diagnostic_out_PinB_0();
+    diagnostic_init_PinT_OutputMode();
+    diagnostic_out_PinT_0();
+
+
 
     if ( check_low_battery() ) {
 
@@ -2271,7 +2347,6 @@ int main(void)
         __builtin_unreachable();
 
     }
-
 
     // Sanity check EEPROM flags
     // Flags must all be either 0 or 1
@@ -2308,10 +2383,24 @@ int main(void)
         }
 
 
-        // Clear the low voltage flag from our initial powerup
+        showSetCloc();
+
+        // Before we clear the low voltage flag on the RX8900, lets give it a little bit more time
+        // to charge the capacitor. This is defense for an issue we've seen on a few percent of units
+        // where the RTC sees a low voltage after programming.
+        // According to data sheet, the MOS switch is open for the first 1 second on power up, so
+        // maybe with the internal diode and the 100OHM resistor we need more to fully charge?
+        // No downside except a programming cycle takes longer.
+
+        rx8900_close_MOS();
+        _delay_ms(1500);
+        rx8900_open_MOS();
+
+        // Clear the low voltage flag (always set on initial powerup)
+        // We are about to put a known good time in, so we don't care what has happened to the RTC.
         rx8900_low_voltage_clear();
 
-        /// This is our first startup at the factory! Set the current time into the RTC!
+        /// Set the current time from START_TIME in EEPROM into the RTC timekeeping registers!
 
         rx8900_time_regs_block_t now;
 
@@ -2323,14 +2412,10 @@ int main(void)
 
         }
 
-        // We have seen a low voltage, so we need to set up the rx8900
-        // Do we need to reset here? Datasheet are not clear. In the docs for the control
-        // reg is seems like this just rests us to the beginning of the current second, but
-        // under low power description it says we must reset after a VLF. Do they mean reset
-        // the generic verb, or this reset bit?
+        // This resets us back to the beginning of the current second. This will prevent
+        // a time increment update from happening while we are setting the new time.
+        // Necessary? Unclear from datasheets.
 
-        // This resets us back to the begining of the current second. This will prevent
-        // a time increment from happening while we are setting the new time.
         rx8900_reset();
 
         rx8900_time_regs_set( &now );
@@ -2338,10 +2423,22 @@ int main(void)
         // Empirically determined that setting the time also resets the seconds phase and the FOUT phase
 
         rx8900_set_magic();     // As a backup plan, also store our secret magic in the unused alarm registers
-                                // so we can check later
+                                // so we can check later. Currently unused.
 
         // Mark that we used the start_time so we don't try to reuse it
         save_start_flag_to_EEPROM();
+
+        // Wait for the EEPROM write to complete
+        // If we do not do this and just reset, the the write does not work!
+        eeprom_busy_wait();
+
+        // Now we do a software reset on the XMEGA. This will start us again with a clean slate and read back the time from the
+        // RX8900 and do the normal validity checks and low voltage flag checks. We do this to Fail fast during the programming rather than
+        // discovering the problem decades later at the first battery change.
+
+        softwareReset();
+
+        __builtin_unreachable();
 
     } // if (load_start_flag_from_EEPROM() == 0x00 )
 

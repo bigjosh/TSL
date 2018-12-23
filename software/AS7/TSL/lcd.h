@@ -131,5 +131,80 @@ void lcd_unblank();
 
 void showPinBPhase3Text();
 
+void showSetCloc();
+
+void showReset();
+
+// Bad interrupt
+
+void showbAdint();
+
+// LCD FONT----
+
+// Map 7 segments A-G to internal representation bits
+// A=0b00000001, B=0b00000010, etc
+// Just luck that 7 segments fits into an 8 bit byte
+
+#define LCD_SEG_BIT( letter ) ( 1 << (letter - 'A') )
+
+#define SEG_A LCD_SEG_BIT('A')
+#define SEG_B LCD_SEG_BIT('B')
+#define SEG_C LCD_SEG_BIT('C')
+#define SEG_D LCD_SEG_BIT('D')
+#define SEG_E LCD_SEG_BIT('E')
+#define SEG_F LCD_SEG_BIT('F')
+#define SEG_G LCD_SEG_BIT('G')
+
+// Which segments A-G do we turn on for each of the displayed chars 0-9
+
+/*
+// This is rightside up font
+
+const uint8_t lcd_font[] = {
+    SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F ,         // 0
+    SEG_B | SEG_C ,                                         // 1
+    SEG_A | SEG_B | SEG_G | SEG_E | SEG_D ,                 // 2
+    SEG_A | SEG_B | SEG_G | SEG_C | SEG_D ,                 // 3
+    SEG_F | SEG_G | SEG_B | SEG_C ,                         // 4
+    SEG_A | SEG_F | SEG_G | SEG_C | SEG_D ,                 // 5
+    SEG_A | SEG_C | SEG_D | SEG_E | SEG_F | SEG_G ,         // 6
+    SEG_A | SEG_B | SEG_C ,                                 // 7
+    SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F | SEG_G , // 8
+    SEG_A | SEG_B | SEG_C | SEG_D | SEG_F | SEG_G ,         // 9
+};
+
+*/
+
+// This is upside down font
+
+extern const uint8_t lcd_font_digits[];
+
+extern const uint8_t lcd_font_char_dash;
+extern const uint8_t lcd_font_char_c;
+extern const uint8_t lcd_font_char_L;
+extern const uint8_t lcd_font_char_o;
+extern const uint8_t lcd_font_char_E;
+extern const uint8_t lcd_font_char_r;
+extern const uint8_t lcd_font_char_P;
+
+extern const uint8_t lcd_font_char_J;
+extern const uint8_t lcd_font_char_O;
+extern const uint8_t lcd_font_char_S;
+extern const uint8_t lcd_font_char_H;
+
+extern const uint8_t lcd_font_char_n;
+extern const uint8_t lcd_font_char_t;
+extern const uint8_t lcd_font_char_i;                  // i
+extern const uint8_t lcd_font_char_G;
+
+extern const uint8_t lcd_font_char_V;
+extern const uint8_t lcd_font_char_l;
+
+extern const uint8_t lcd_font_char_b;
+extern const uint8_t lcd_font_char_A;
+extern const uint8_t lcd_font_char_d;
+extern const uint8_t lcd_font_char_U;
+
+void lcd_show_fontchar( uint8_t segs , uint8_t d );
 
 #endif /* LCD_H_ */

@@ -118,6 +118,31 @@ Do we need this? Well we certainly do not need it if the RTC is already running,
 
 ...so we wait. 
 
+### Reset flags mode
+
+For testing only. 
+
+Displayed for 2 seconds after each reset. Shows the reset flags currently set. We clear the flags after testing them, so there should only be one flag set indicating the reason for the most recent reset. 
+
+Shows the word `rESEt` on the left LCD and the following possible flags on the right LCD...
+
+| Letter | Name | Description |
+| - | - | - | 
+| P | Power On | Initial power up |
+| E | External | The RESET pin was pulled low<br>(We disable this pin)  |
+| b | Brown out | Brown out voltage reached<br>(We disable the brown out detector) |
+| d | Download | PDI download triggered reset |
+| S | Software | Software generated reset<br>(We trigger this after setting the time) |
+| U | Undefined | One of the two undefined flags were set |  
+
+### Set Clock mode
+
+Shows "SEt CLoC" on the LCD.  
+
+Shown when we initialy set the start time into the RTC during factory programming. 
+
+After this we execute a software reset.  
+
 ### Clock mode
 
 Shows current real time as MMDDYY HHMMSS with blinking ":"'s.
