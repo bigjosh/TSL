@@ -824,7 +824,8 @@ inline uint8_t diagnostic_in_EitherPin_Grounded() {
 // QUIRK: The RX8900 updates the time on the FALLING edge of FOUT.
 
 void FOUT_in_pin_enable() {
-    PORTB.PIN2CTRL = PORT_ISC_FALLING_gc  ;       // Only interrupt once per second on the rising edge of the 1Hz FOE signal from the RTC
+    PORTB.PIN2CTRL = PORT_ISC_BOTHEDGES_gc;       // Interrupt on both the rising and falling edges of the 1Hz FOE signal from the RTC
+                                                  // We will check these on waking and interlock to avoid spurious resets
 
     PORTB.INTCTRL = PORT_INT0LVL0_bm;            // PORTB int0 is low level interrupt
     PORTB_INT0MASK |= PIN2_bm;                   // Enable pin 7 to be int0
@@ -834,6 +835,31 @@ void FOUT_in_pin_enable() {
 
 inline uint8_t fout_pin_in_value() {
     return PORTB.IN & _BV(2);
+}
+
+
+// A new second starts on the falling edge of FOUT
+// This function will sleep until that falling edge
+// Filters out spurious interrupts by testing the value
+// of FOUT after each interrupt to make sure it matches the
+// expected state and interlocks the rising and falling edges
+// This was added because we were seeing spurious interrupts
+// sometimes due to static electricity.
+// Assumes that the FOUT pin is set to interrupt on _both_ edges.
+
+inline void sleep_until_next_second() {
+
+    // This first while() will fall though if FOUT is already high
+
+    while (!fout_pin_in_value()) {
+        sleep_cpu();
+    }
+
+    while (fout_pin_in_value()) {
+        sleep_cpu();
+    }
+
+
 }
 
 // Output a 1 on the pin connected to FOE
@@ -1695,36 +1721,58 @@ void rx8900_reset() {
 }
 
 
-void sleep_until_next_fout_falling_edge() {
-    asm("nop");
-    do {
-        sleep_cpu();
-    } while (fout_pin_in_value());
-}
-
 void figure8PatternUntilTriggerReleased() {
     // Show figure 8 pattern until pin pulled
 
     // TODO: unroll this for efficiency
+    // TODO: Update double time since it looks cooler?
 
     uint8_t s=0;
 
+
     do {
         clearLCD();
+
         for( uint8_t d=0;d<12;d+=2) {
             figure8On( d , s );
             figure8On( d+1 , (s+6)%8 );
         }
 
 
-        sleep_until_next_fout_falling_edge();
-
-
-
         s++;
 
         if (s==8) {
             s=0;
+        }
+
+        // This interlock makes sure we only update the display once per alternating FOUT levels
+        // and not on spurious interrupts where FOUT does not change.
+        // We also always check the trigger pin state so that the reaction to the trigger pin
+        // being pulled is instant and does not have to wait for the next FOUT transition.
+        // (The trigger pin state change also generates an interrupt that will wake us).
+
+        // Note that there is a race condition here where the user could pull the trigger pin
+        // in the cycle between when we check it and when we go to sleep. Then it will not generate an interrupt
+        // because the pin change happened before we entered sleep, so the user will have to wait 1/2 second
+        // before the trigger pull is noticed. We could eliminate this race by bracketing the test and sleep
+        // with cli() sei(), but this would use up power on every update to eliminate a litterally
+        // 1 in a million race and the impact of that race is very low, so we leave it.
+        // LMK if you ever actually see (and notice!) that race IRL!
+
+        uint8_t last_fout = fout_pin_in_value();
+
+        while ( last_fout == fout_pin_in_value() && triggerPinPresent() ) {
+
+            sleep_cpu();
+
+        }
+
+        last_fout= fout_pin_in_value();
+
+        while ( last_fout == fout_pin_in_value() && triggerPinPresent() ) {
+
+            sleep_cpu();
+
         }
 
     } while ( triggerPinPresent() );     // Repeat until pin pressed
@@ -2132,6 +2180,7 @@ void fout_graph() {
 }
 
 
+
 // For testing how long a backup from the interrupt we need to discern an FOUT
 // from the RTC from a spontaneously interrupt from static electricity.
 // Digit | Meaning
@@ -2141,40 +2190,50 @@ void fout_graph() {
 
 
 uint8_t reset_count __attribute__ ((section (".noinit")));
+uint24_t seconds  __attribute__ ((section (".noinit")));
+uint24_t glitches  __attribute__ ((section (".noinit")));
 
-void fout_falling_edge_glitch_tester() {
-    
-    
+uint8_t last_fout __attribute__ ((section (".noinit")));
+
+
+void fout_glitch_tester() {
+
+    digitShow( 6 , seconds   );
+    digitShow( 5 , glitches  );
+
+   // Enable the 1Hz output from the RTC
+   rx8900_fout_1Hz();
+
    reset_count++;
    if (reset_count>9) reset_count=0;
    digitShow( 0 , reset_count );
-    
-   // Enable the 1Hz output from the RTC 
-   rx8900_fout_1Hz();    
-   
-   sleep_cpu();
-
-    uint24_t seconds=0;
-    uint24_t glitches=0;
 
     while (1) {
 
-        if ( fout_pin_in_value() ) {
+        while (last_fout == fout_pin_in_value()) {
 
-            glitches++;
+            sleep_cpu();
 
-            if (glitches==10) glitches=0;
+            if (last_fout== fout_pin_in_value()) {
 
-        }  else {
-           seconds++;
-           if (seconds==10) seconds=0;
+                glitches++;
+                if (glitches==10) glitches=0;
+
+                digitShow( 5 , glitches  );
+
+            }
 
         }
 
-        digitShow( 6 , seconds   );
-        digitShow( 5 , glitches  );
+        last_fout = fout_pin_in_value();
 
-        sleep_cpu();
+        if (last_fout==0) {     // Falling edge
+
+               seconds++;
+               if (seconds==10) seconds=0;
+               digitShow( 6 , seconds   );
+
+        }
 
     }
 
@@ -2207,6 +2266,9 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
                     while (so<10) {
 
                         showNowS1s( so );
+
+                        // To avoid incrementing the count on spurious interrupts, we check FOUT
+                        // level and interlock.
 
                         sleep_cpu();
 
@@ -2469,7 +2531,7 @@ int main(void)
 
     /*
 
-    // Testing if grounding these pins had an effect on ESD. 
+    // Testing if grounding these pins had an effect on ESD.
     // UPDATE: Does not.
 
     diagnostic_init_PinB_OutputMode();
