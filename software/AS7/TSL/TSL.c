@@ -1747,6 +1747,11 @@ void figure8PatternUntilTriggerReleased() {
 
         // This interlock makes sure we only update the display once per alternating FOUT levels
         // and not on spurious interrupts where FOUT does not change.
+
+        // Note that we can not use wait_for_next_second() here becuase we want to check the
+        // trigger pin state after each interrupt in case the interrupt was a pin change
+        // on the trigger pin rather than FOUT.
+
         // We also always check the trigger pin state so that the reaction to the trigger pin
         // being pulled is instant and does not have to wait for the next FOUT transition.
         // (The trigger pin state change also generates an interrupt that will wake us).
@@ -2270,7 +2275,7 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
                         // To avoid incrementing the count on spurious interrupts, we check FOUT
                         // level and interlock.
 
-                        sleep_cpu();
+                        sleep_until_next_second();
 
                         so++;
 
