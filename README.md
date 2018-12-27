@@ -179,7 +179,7 @@ This likely means that the unit was stored as old new stock for 100+ years and t
 
 ### Low Battery mode
 
-Blinks the little battery icons at 0.5Hz to indicate that a low battery voltage was detected.
+Blinks the little battery icons at 1Hz to indicate that a low battery voltage was detected.
 
 The battery voltage is checked once at start power up and then every 8 days in Time Since Launch mode starting at the update from day 0 to day 1. If the voltage is less than about 2.6 volts, then we go into low battery mode.
 

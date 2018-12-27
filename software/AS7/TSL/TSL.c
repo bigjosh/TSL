@@ -7,7 +7,7 @@
 
 // Shown on Pin `B` diagnostic display.
 
-#define VERSION 101
+#define VERSION 102
 
 // Required AVR Libraries
 #include <avr/io.h>
@@ -1843,6 +1843,8 @@ void showEmptyBatteryIcon() {
 
 }
 
+// Blinks whatever is on the LCD on and off at 2Hz
+
 void blink_lcd_forever() {
 
     while (1) {
@@ -2086,7 +2088,7 @@ void accuracyTester() {
 
         // Start high
         diagnostic_out_PinT_1();
-        sleep_cpu();
+        sleep_until_next_second();
 
         // Go low on output
         // Falling edge is what we time to
@@ -2322,7 +2324,7 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
             clearLCD();
             showc2018JOSH();            // Show copyright egg
 
-            sleep_cpu();                // Show for 1 second
+            sleep_until_next_second();  // Show for 1 second
             clearLCD();
 
             so++;                       // Account for this second
@@ -2506,15 +2508,15 @@ int main(void)
         // Right decimal point means low voltage flag set in EEPROM (we have seen a low voltage on RX8900 in the past)
 
         showPinBPhase1();
-        sleep_cpu();
+        sleep_until_next_second();
 
         clearLCD();
         showPinBPhase2();
-        sleep_cpu();
+        sleep_until_next_second();
 
         clearLCD();
         showPinBPhase3();
-        sleep_cpu();
+        sleep_until_next_second();
 
         clearLCD();
     }
@@ -2729,11 +2731,11 @@ int main(void)
 
         }
 
-        // This sleep_cpu() jumps us to the begining of the next second on the RTC
+        // This jumps us to the beginning of the next second on the RTC
         // This way we know when we do the Time Since Launch calculation we are including the
         // current full second
 
-        sleep_cpu();
+        sleep_until_next_second();
 
         // Fall though to normal run mode below...
 
@@ -2754,7 +2756,7 @@ int main(void)
 
         while ( !triggerPinPresent() ) {
 
-            // Blink the colons to indicate clock mode
+            // Blink the colons at 2Hz to indicate clock mode
 
             blink_toggle = !blink_toggle;
 
@@ -2764,6 +2766,10 @@ int main(void)
                 colonROn();
 
             }
+
+            // Here we use just pain sleep_cpu() rather than
+            // wait_until_next_second() so that we will react to the
+            // trigger pin insertion immediately.
 
             rx8900_time_regs_get( &now );
             showClockTime( &now );
@@ -2780,16 +2786,13 @@ int main(void)
 
         // "Ready to Launch mode"
 
-        while ( triggerPinPresent() ) {
 
-            // Show a nice pattern until the pin is pulled that shows we are ready
+        // Show a nice pattern until the pin is pulled that shows we are ready
 
-            // TODO: Check for low battery in here?
-            // TODO: Make more power efficient?
+        // TODO: Check for low battery in here?
+        // TODO: Make more power efficient?
 
-            figure8PatternUntilTriggerReleased();
-
-        }
+        figure8PatternUntilTriggerReleased();
 
         // Trigger pin pulled!
 
@@ -2865,7 +2868,7 @@ int main(void)
     // because we do not want to miss a pulse between when we check the time and get counting
     // or our count display will be behind.
 
-    // We also want to be at the beginning of the current second in case we has to roll the
+    // We also want to be at the beginning of the current second in case we have to roll the
     // century interlock. If we do, then it will write back to the RTC which will set us back to the
     // beginning of the current second. The closer we are to the beginning when we do this,
     // the less time we loose. Don't fret too much, only happens once every 50 years.
@@ -2873,7 +2876,7 @@ int main(void)
     // Now we have to figure out what the display count looks like by subtracting the
     // time_trigger from the time_now to get the time_since_lanuch
 
-    sleep_cpu();
+    sleep_until_next_second();
 
     rx8900_time_regs_block_t time_now_reg_block;
     rx8900_time_regs_get_and_update_century_interlock( &time_now_reg_block );       // This will the century interlock and save back to EEPROM if necessary
