@@ -832,7 +832,7 @@ void FOUT_in_pin_enable() {
 
 // Returns the current FOUT pin state
 
-inline uint8_t testFOUT() {
+inline uint8_t fout_pin_in_value() {
     return PORTB.IN & _BV(2);
 }
 
@@ -957,7 +957,7 @@ void toggleP57() {
 
 }
 
-void initFlash() {
+void initFlashBulbs() {
 
     FlashFetInit0();
     FlashFetInit1();
@@ -1695,6 +1695,13 @@ void rx8900_reset() {
 }
 
 
+void sleep_until_next_fout_falling_edge() {
+    asm("nop");
+    do {
+        sleep_cpu();
+    } while (fout_pin_in_value());
+}
+
 void figure8PatternUntilTriggerReleased() {
     // Show figure 8 pattern until pin pulled
 
@@ -1709,7 +1716,10 @@ void figure8PatternUntilTriggerReleased() {
             figure8On( d+1 , (s+6)%8 );
         }
 
-        sleep_cpu();
+
+        sleep_until_next_fout_falling_edge();
+
+
 
         s++;
 
@@ -1868,7 +1878,7 @@ void badInterruptMode() {
 
 }
 
-// Catch any errant interrupts 
+// Catch any errant interrupts
 // These should never ever happen, but if they
 // do happen we want to know becuase something is
 // wrong
@@ -2057,6 +2067,117 @@ void softwareReset() {
     RST.CTRL =  RST_SWRST_bm;
 
     __builtin_unreachable();
+}
+
+// Shows a graph of the FOUT level for a short window after each interrupt.
+// 0=low, 1=high. Left to right.
+
+void fout_graph() {
+
+    uint8_t colon_alternator=0;
+
+    while (1) {
+
+        uint8_t levels[12];         // Levels captured right after we wake 11=left (oldest), 0=right (newest)
+
+        sleep_cpu();
+
+        // We are awake!
+
+        // First collect up the values....
+
+        uint8_t s=11;
+
+        do {
+
+            levels[s]= fout_pin_in_value();
+
+            _delay_ms(1);
+
+        } while ( (s--) > 0);
+
+        clearLCD();
+
+
+       // Now display the collected values
+
+        s=11;
+
+        do {
+
+            digitShow( s , levels[s] );
+
+        } while ( (s--) > 0);
+
+
+        colon_alternator = !colon_alternator;
+
+        if (colon_alternator) {
+
+            colonLOn();
+
+        } else {
+
+            colonROn();
+
+        }
+
+
+        // Wait long enough to see it, skip next FOUT transision
+        _delay_ms(1500);
+
+    }
+
+    __builtin_unreachable();
+}
+
+
+// For testing how long a backup from the interrupt we need to discern an FOUT
+// from the RTC from a spontaneously interrupt from static electricity.
+// Digit | Meaning
+//   6      Seconds counter (driven off FOUT from RTC)
+//   5      Glitch counter (interrupts where FOUT was not low)
+//   0      reset counter
+
+
+uint8_t reset_count __attribute__ ((section (".noinit")));
+
+void fout_falling_edge_glitch_tester() {
+    
+    
+   reset_count++;
+   if (reset_count>9) reset_count=0;
+   digitShow( 0 , reset_count );
+    
+   // Enable the 1Hz output from the RTC 
+   rx8900_fout_1Hz();    
+   
+   sleep_cpu();
+
+    uint24_t seconds=0;
+    uint24_t glitches=0;
+
+    while (1) {
+
+        if ( fout_pin_in_value() ) {
+
+            glitches++;
+
+            if (glitches==10) glitches=0;
+
+        }  else {
+           seconds++;
+           if (seconds==10) seconds=0;
+
+        }
+
+        digitShow( 6 , seconds   );
+        digitShow( 5 , glitches  );
+
+        sleep_cpu();
+
+    }
+
 }
 
 // Returns when we hit 999999 days 23:59:59 = 2737.90926 years years.
@@ -2264,7 +2385,7 @@ int main(void)
 
 	sleep_enable();         // This chip needs you to tell it that it is ok to sleep before the sleep instruction will actually work
 
-    initFlash();            // Enable output on the pins that control the transistors that flash the flash LEDs
+    initFlashBulbs();            // Enable output on the pins that control the transistors that flash the flash LEDs
 
     output1onFOEpin();      // Enable the 1Hz output from the RTC via its Frequency Output Enable pin
 
@@ -2274,30 +2395,37 @@ int main(void)
 
     sei();                  // Note that our ISRs are empty, we only use interrupts to wake from sleep.
 
-    // TODO: Find a way to stop ISR from running to save the power wasted in all those pushes and pops
+    showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
 
-    // WARNING: testing only
-    // Show the reset flags for diagnostics
-    showAndClearResetBits();
+    // Note that up until now we have not communicated with the RX8900. It is unclear from the datasheets if we are
+    // allowed to communicate now or if we need to wait for the oscillator to stabilize first before talking
+    // over TWI, so we take the conservative approach and wait.
 
-    //showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
-
-    _delay_ms(2000);        // tSTA RX8900 oscillator stabilization time 1s max at 25C
+    _delay_ms(1500);        // tSTA RX8900 oscillator stabilization time 1s max at 25C
                             // "Please perform initial setting only tSTA (oscillation start time), when the
                             // built-in oscillation is stable."
 
                             // Note that we can not use the interrupt to wake us from sleep here because
                             // the RTC is not sending it yet!
 
+    rx8900_open_MOS();      // Open the switch that connects Vcc to Vbat. This way when the person pulls the battery out, the
+                            // capacitor connected to Vbat will not be connected to the XMEGA and will only be used to power the RTC
+                            // This also disables voltage detection because it seems you can not open the switch with it enabled.
+                            // Note that we wait to do this until after after the oscillator has settled since it requires TWI, but
+                            // we also Want to wait at least 1 second because the RTC leaves the switch open for the first 1 second
+                            // and it is not defined what happens to the voltage detect registers after that 1 second is up....
 
-    // Now that the oscillator is settled, we set the FOUT to  1Hz since we will need that
+    /*
+         Before the voltage detection is performed the first time (1 sec. after initial power-up), the
+         RTC and VBAT are supplied via a diode in parallel to the PMOS-switch. If the voltage detector measures a VDD voltage
+         above VDET3-level, the RTC will enter NORMAL operation mode.
+    */
+
+
+    // Now that the RTC is definitely ready, we set the FOUT to 1Hz since we will need that
     // for waking us from sleep no matter what happens next...
 
     rx8900_fout_1Hz();
-
-    rx8900_open_MOS();      // Open the switch that connects Vcc to Vbat. This way when the person pulls the battery out, the
-    // capacitor connected to Vbat will not be connected to the XMEGA and will only be used to power the RTC
-    // This also disables voltage detection because it seems you can not open the switch with it enabled.
 
     clearLCD();
 
@@ -2339,12 +2467,17 @@ int main(void)
 
     }
 
+    /*
+
+    // Testing if grounding these pins had an effect on ESD. 
+    // UPDATE: Does not.
+
     diagnostic_init_PinB_OutputMode();
     diagnostic_out_PinB_0();
     diagnostic_init_PinT_OutputMode();
     diagnostic_out_PinT_0();
 
-
+    */
 
     if ( check_low_battery() ) {
 
@@ -2456,6 +2589,9 @@ int main(void)
         // Permanently remember this since we now do not know what time it is ever again
         save_low_voltage_flag_to_EEPROM();
 
+        // Wait for save to complete
+        eeprom_busy_wait();
+
         // Don't bother clearing the low voltage because the time is gone forever (or until
         // reset at factory) so nothing we can do about it now
 
@@ -2527,7 +2663,7 @@ int main(void)
         }
 
         // This sleep_cpu() jumps us to the begining of the next second on the RTC
-        // This way we know when we do the Tiem Since Lanuch calculation we are including the
+        // This way we know when we do the Time Since Launch calculation we are including the
         // current full second
 
         sleep_cpu();
@@ -2538,8 +2674,8 @@ int main(void)
 
         // We are trigger virgins!
 
-        // Before we continue to "Ready to Launch mode", we need the pin to be in so that it can be pulled out. so
-        // show clock time a long as pin is out for double check it got set right and is running
+        // Before we continue to "Ready to Launch mode", we need the pin to be in so that it can be pulled out.
+        // Show RTC clock time a long as pin is out for double check that it got set right and is running.
 
         rx8900_time_regs_block_t now;
 
@@ -2602,7 +2738,7 @@ int main(void)
         // start on an even second boundary so that the first 0->1 transistion happens 1 full second
         // after the trigger is pulled.
 
-        // ALternately we could wait for next forward second update, but then the person pulled the trigger and they
+        // Alternately we could wait for next forward second update, but the user pulled the trigger and they
         // might be waiting up to a second for the show to begin... and that is no fun!
 
         /*
@@ -2623,6 +2759,7 @@ int main(void)
 
         save_triggertime_to_EEPROM( &trigger_time );    // Save the time we triggered forever
         save_trigger_flag_to_EEPROM( );                 // Set the flag so we know that trigger_time in EEPROM is valid
+        eeprom_busy_wait();                             // Wait for save to complete just to be safe.
 
         // Disable trigger pin - we do not need it ever again!
         // We disable it also to prevent any spurious interrupts coming from the
@@ -2657,7 +2794,7 @@ int main(void)
     // When we get here, we know that the RTC has a good time and trigger_time is set.
 
     // Now we sleep to make sure we are in sync with the RTC seconds update (the flash takes several
-     // 100 milliseconds). We want to be right at the beginning of the current second
+    // 100's of milliseconds). We want to be right at the beginning of the current second
     // because we do not want to miss a pulse between when we check the time and get counting
     // or our count display will be behind.
 
@@ -2708,20 +2845,3 @@ int main(void)
 
     __builtin_unreachable();
 }
-
-
-/*
-
-// Subroutine for handling LCD Frame Interrupts
-// This is a user configurable interrupt based
-// on the frame rate of the LCD. It can be used
-// as a miscellaneous timer by the user since it
-// occurs at a constant rate.
-
-// We leave it empty and just do all our processing when it returns.
-// It would be nice to avoid this altogethers, but I do not think it is possible on AVR.
-
-EMPTY_INTERRUPT(LCD_INT_vect);
-
-
-*/
