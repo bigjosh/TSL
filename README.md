@@ -17,14 +17,6 @@ PCB and firmware for the CW&T Time Since Launch project.
 * Optional 32768Hz tuning fork quartz watch crystal 
 
 
-## Interesting twists
-
-We actually have two oscillators running simultaneously here.
-
-The ATMEGA uses either the XTAL or the internal ULP oscillator to drive the LCD controller. The xtal uses about 0.3uA less current, but requires an extra part (the ULP is built in to the XMEGA).  
-
-The RX8900 is programmed to generate a 1Hz output pulse (FOUT) taht is connected to an IO pin on the XMEGA. The rising edge of each of these pulses causes an interrupt on the XMEGA which wakes it from deep sleep. The XMEGA then increments the count and updates the display and goes back to deep sleep until the next pulse.  
-
 ## XMEGA EEPROM usage
 
 We use a block at the start of EEPROM to ...
@@ -98,9 +90,9 @@ Since this problem is predicable we can account for it when resetting the RTC in
 ### Factory power up
 The factory burns the firmware into flash and also stores the current GMT time into `STARTTIME` in the EEPROM block. 
 
-On initial power up, firmware sees a new `STARTTIME` block in EEPROM and uses it to set the RTC. It then sets the `STARTFLAG` so that the time is not programmed again on subsequent power ups.  
+On initial power up, firmware sees a new `STARTTIME` block in EEPROM and uses it to set the RTC. It then sets the `STARTFLAG` so that the time is not programmed again on subsequent power ups and executes a software reset to being normal operation with the new start time.  
 
-If the trigger pin is out at this point we go into clock mode and show the current GMT time until the pin is inserted. THIS CLOCKMODE IS MEANT FOR TESTING ONLY. It is very high power (like 50x normal count!), so be sure to insert the pin as soon as you have verified the correct time. DO NOT USE A TSL IN CLOCKMODE AS A CLOCK. If you really want a TSL clock, we can make you power efficient firmware for that. 
+If the trigger pin is out at start up we go into clock mode and show the current GMT time until the pin is inserted. THIS CLOCKMODE IS MEANT FOR TESTING ONLY. It is very high power (like 50x normal count!), so be sure to insert the pin as soon as you have verified the correct time. DO NOT USE A TSL IN CLOCKMODE AS A CLOCK. If you really want a TSL clock, we can make you power efficient firmware for that. 
 
 Once the pin is in, we go into Ready To Launch mode. 
  
@@ -120,7 +112,7 @@ Do we need this? Well we certainly do not need it if the RTC is already running,
 
 ### Reset flags mode
 
-For testing only. 
+For testing only - removed from production firmware.
 
 Displayed for 2 seconds after each reset. Shows the reset flags currently set. We clear the flags after testing them, so there should only be one flag set indicating the reason for the most recent reset. 
 
@@ -139,7 +131,7 @@ Shows the word `rESEt` on the left LCD and the following possible flags on the r
 
 Shows "SEt CLoC" on the LCD.  
 
-Shown when we initialy set the start time into the RTC during factory programming. 
+Shown when we initially set the start time from EEPROM into the RTC during factory programming. 
 
 After this we execute a software reset.  
 
@@ -149,7 +141,9 @@ Shows current real time as MMDDYY HHMMSS with blinking ":"'s.
 
 This time comes from the RTC and should be correct GMT ±2ppm if it was programmed correctly at the factory. 
 
-This mode is shown after initial time is set by the programming fixture until the pin is inserted.    
+This mode is shown at start up if we have a good start time, but no trigger time and the pin is not inserted. 
+
+We existing this mode when the pin is inserted and goto Ready To Launch mode.     
 
 WARING: Clock mode uses about 50x as much power as normal Time Since Launch mode, so don't leave it on for too long! For diagnostics only! 
 
@@ -179,7 +173,7 @@ The unit can be factory serviced and set with the correct real time and it will 
 
 Shows `cLoc Error` blinking forever.
 
-Indicates that the trigger pin has never been pulled, and that the real time was lost so now needs the real time to be set before we can go to Ready To Launch mode.    
+Indicates that the trigger pin has never been pulled, and that the real time was lost. The start time must be set again before we can go to Ready To Launch mode.    
 
 This likely means that the unit was stored as old new stock for 100+ years and the batteries we allowed to go completely dead before first use. The unit can be factory serviced to set the real time and then will be ready for first trigger.   
 
@@ -187,11 +181,11 @@ This likely means that the unit was stored as old new stock for 100+ years and t
 
 Blinks the little battery icons at 0.5Hz to indicate that a low battery voltage was detected.
 
-The battery voltage is checked once at start power up and then every 8 days in Time Since Launch mode starting at the change from day 0 to day 1. If the voltage is less than about 2.6 volts, then we go into low battery mode.
+The battery voltage is checked once at start power up and then every 8 days in Time Since Launch mode starting at the update from day 0 to day 1. If the voltage is less than about 2.6 volts, then we go into low battery mode.
 
-When you see this, you should swap out the batteries for new ones. Be sure to use Energizer Ultra. Be sure to have the new ones ready before you remove the old ones. Change the batteries one at a time - taking the first old one out and putting the new one in, then taking the second one out and putting the new one in.
+When you see this, you should swap out the batteries for new ones. No need to run, you likely have moths to years to get it done before the time is lost. Be sure to use Energizer Ultra. Be sure to have the new ones ready before you remove the old ones. Change the batteries one at a time - taking the first old one out and putting the new one in, then taking the second one out and putting the new one in.
 
-If after you change the batteries you still see low battery mode, then pull one of the batteries out and wait for the LCD to go blank and then quickly put the battery back in. Alternately you can use a wire jumper to connect the `C' pin and the `G` pin on the 6 pin ISP header to reset the board. 
+If after you change the batteries you still see low battery mode, then pull one of the batteries out and wait for the LCD to go blank and then quickly put the battery back in. 
 
 Note that we intentionally do not check for low batteries during Ready to Launch mode. It is expected that a TSL will spend most of its decades in Time Since Launch mode, so no point in wasting good power right at the beginning of its long life. Also, what cut off would we use? Should it be higher than the cut off during Time Since Launch mode? If your TSL has been sitting around for more than 20 years and you are about to have a big moment and you want to play it safe, you can always prophylacticly put in new batteries. 
 
@@ -208,9 +202,9 @@ The idea here is to avoid problems of people trying to ebay old TSL units that h
 
 Shows "bAd Int" blinking forever.
 
-This means that an unexpected interrupt happened. This would be very unexpected.  
+This means that an unexpected interrupt happened. This would be very unexpected indeed.  
 
-The only interrupts that are ever enabled are for the trigger pin and the 1Hz FOUT tick coming from the RTC, and we turn off the trigger pin after the pin is pulled.
+The only interrupts that are ever enabled are for the trigger pin and the 2Hz FOUT tick (risgin and falled edge of 1Hz) coming from the RTC, and we turn off the trigger pin after the pin is pulled.
 
 ### EEPROM Error Mode
 
@@ -316,6 +310,16 @@ Grounding the `T` pin will show the stored trigger time. The left & right `:`'s 
 The display will show "no triG" if the EEPROM trigger flag is not set.   
 
 
+## Interesting twists
+
+We actually have two oscillators running simultaneously here.
+
+The ATMEGA uses either the XTAL or the internal ULP oscillator to drive the LCD controller. The xtal uses about 0.3uA less current, but requires an extra part (the ULP is built in to the XMEGA).  
+
+The RX8900 is programmed to generate a 1Hz output pulse (FOUT) that is connected to an IO pin on the XMEGA. The rising and falling edges of each of these pulses causes an interrupt on the XMEGA which wakes it from deep sleep. On waking, the XMEGA checks the FOUT pin to see if it has changed, and if not then it goes back to sleep. We do this to filter spurious interrupts that can be caused by noise from static electricity from rubbing the glass.  
+
+On the falling FOUT edge the XMEGA then increments the count and updates the display and goes back to deep sleep until the next interrupt.  
+
 ## Build notes
 
 
@@ -342,8 +346,8 @@ We do this to avoid inadvertent resets. We have seen cases where the built-in pu
 
 | Mode | Vcc=3.55V| Vcc=2.6V |
 | - | -: | -: | 
-| Ready to Launch | 4.9uA | 4.3uA | 
-| Time Since Launch | 5.9uA | 5.6uA |
+| Ready to Launch | 5.5uA | 5.3uA | 
+| Time Since Launch | 6.0uA | 5.4uA |
 | Long Now | 4.7uA | 4.2uA | 
 | Low Battery | 3.9uA |  3.5uA |
 | quiescent | 3.9uA | 3.4uA |
