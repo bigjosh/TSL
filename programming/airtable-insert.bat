@@ -13,7 +13,7 @@ set tempfile=%tmp%\airtablejson.txt
 REM Escaping the quotes in the JSON string...
 REM https://stackoverflow.com/questions/12849017/echo-of-string-with-double-quotes-to-output-file-using-windows-batch
 
-echo { ^"fields^": { ^"Starttime^": ^"%starttime%^", ^"Serialnumber^": ^"%serialnumber%^", ^"Firmware^": ^"%firmware%^", ^"DeviceID^": ^"%deviceid%^" } } >%tempfile%
+echo { ^"fields^": { ^"Starttime^": ^"%starttime%^", ^"Serialnumber^": ^"%serialnumber%^", ^"Firmware^": [^"%firmware%^"], ^"DeviceID^": ^"%deviceid%^" } } >%tempfile%
 
 REM This command string comes from airtable...
 REM https://airtable.com/app11MZ4rXXpEyFnj/api/docs#curl/table:units:create

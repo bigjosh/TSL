@@ -79,14 +79,12 @@ if NOT "%firmwarerecordescaped:~36,1%"=="Q" (
 	goto end
 )
 
+REM Ok, now we finally have the recordID we need to give airtable for it to let us create a record in Units. 
+
 set firwarerecordid=%firmwarerecordescaped:~19,17%
 
-echo %firwarerecordid%
 
-goto end
-
-
-REM First lets capture the device ID from the ATMEGA chip
+REM Lets capture the device ID from the ATMEGA chip
 REM https://electronics.stackexchange.com/questions/414087/how-can-you-read-out-the-serial-number-of-an-xmega-chip-in-a-batch-file-during-p
 "C:\Program Files (x86)\Atmel\Studio\7.0\atbackend\atprogram.exe" --tool avrispmk2 --interface pdi --device atxmega128b3 read --prodsignature --offset 0x08 --size 11 --format hex --file %tempdeviceidfile%
 if errorlevel 1 (
@@ -125,7 +123,7 @@ if errorlevel 1 (
 
 
 REM Starttime in quotes because it has embeded spaces
-call airtable-insert.bat "%starttime%" %serialno% %firmwarehash% %deviceid%
+call airtable-insert.bat "%starttime%" %serialno% %firwarerecordid% %deviceid%
 
 if errorlevel 1 (
 	set errormessage=Error adding unit record to airtable database
