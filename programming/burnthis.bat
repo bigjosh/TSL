@@ -2,7 +2,11 @@ REM Program a TSL unit and then add a record to the airtable units database
 REM Args: Label serial number of the unit to be programmed
 
 SETLOCAL
-echo 1 %1 1
+
+REM run in default color
+color
+
+set errormessage=
 
 set serialno=
 
@@ -12,9 +16,6 @@ IF "%~1" == "" (
 ) else (
 	set serialno=%1
 )
-
-REM TEst if serialno was set. Note this must be after the IF or it does not work
-if "%serialno%"=="" goto end 
 
 
 REM Update delayseconds to reflect the number of seconds to add to thet start time to account for
@@ -27,12 +28,30 @@ set tempunparsedstarttimefile=%tmp%\unparsedstarttime.txt
 set tempeepromfile=%tmp%\burniteeprom.txt
 set tempdeviceidfile=%tmp%\burnitdeviceid.txt
 set tempfirmwarehashfile=%tmp%\burnitfirmwarehash.txt
+set tempfirmwarerecordfile=%tmp%\burnitfirmwarerecord.txt
+
+
+REM Test if serialno was set. Note this must be after the IF or it does not work
+if "%serialno%"=="" (
+	set errormessage=No serial number specified
+	goto end 
+)
+
+REM Generate a fingerprint of the firmware we just programming
+call md5\md5.bat %firmwarefile% >%tempfirmwarehashfile%
+set /p firmwarehash=<%tempfirmwarehashfile%
+
+
+REM Lets make sure that this firmware hash is in the airtable firmwares table
+curl https://api.airtable.com/v0/app11MZ4rXXpEyFnj/Firmwares/recG6cEJLSYWvHXHU -H "Authorization: Bearer keyfJVUThzOsPBNNJ"
+
+
 
 REM First lets capture the device ID from the ATMEGA chip
 REM https://electronics.stackexchange.com/questions/414087/how-can-you-read-out-the-serial-number-of-an-xmega-chip-in-a-batch-file-during-p
 "C:\Program Files (x86)\Atmel\Studio\7.0\atbackend\atprogram.exe" --tool avrispmk2 --interface pdi --device atxmega128b3 read --prodsignature --offset 0x08 --size 11 --format hex --file %tempdeviceidfile%
 if errorlevel 1 (
-	echo ERROR GETTING DEVICE ID
+	set errormessage=Error getting device ID from unit XMEGA 
 	goto end
 )
 set /p deviceid=<%tempdeviceidfile%
@@ -40,14 +59,14 @@ set /p deviceid=<%tempdeviceidfile%
 REM Next lets write fuses on the XMEGA. We turn program RSTDSBL
 "C:\Program Files (x86)\Atmel\Studio\7.0\atbackend\atprogram.exe" --tool avrispmk2 --interface pdi --device atxmega128b3 write --fuses --values FFFFFFFFEEF7
 if errorlevel 1 (
-	echo ERROR PROGRAMMING FUSES
+	set errormessage=Error programming XMEGA fuses
 	goto end
 )
 
 REM Next lets program the firmware and fuses into the flash on the XMEGA
 "C:\Program Files (x86)\Atmel\Studio\7.0\atbackend\atprogram.exe" --tool avrispmk2 --interface pdi --device atxmega128b3 program --flash --chiperase --format hex --verify --file %firmwarefile% 
 if errorlevel 1 (
-	echo ERROR PROGRAMMING FIRMWARE
+	set errormessage=Error downloading firmware to flash on XMEGA 
 	goto end
 )
 
@@ -61,24 +80,39 @@ set "starttime=%starttimeline:~11%"
 REM And now program the eeprom block into the XMEGA
 "C:\Program Files (x86)\Atmel\Studio\7.0\atbackend\atprogram.exe" --tool avrispmk2 --interface pdi --device atxmega128b3 erase --eeprom program --eeprom --format bin --verify --file %tempeepromfile% 
 if errorlevel 1 (
-	echo ERROR PROGRAMMING EEPROM DATA BLOCK
+	set errormessage=Error writing eeprom block to XMEGA 
 	goto end
 )
 
 
-REM next generate a fingerprint of the firmware we just programming
-call md5\md5.bat %firmwarefile% >%tempfirmwarehashfile%
-set /p firmwarehash=<%tempfirmwarehashfile%
+REM Starttime in quotes because it has embeded spaces
+call airtable-insert.bat "%starttime%" %serialno% %firmwarehash% %deviceid%
+
+if errorlevel 1 (
+	set errormessage=Error adding unit record to airtable database
+	goto end
+)
+
+
+:end
 
 REM Clean up after ourselves 
 rm %tempeepromfile%
 rm %tempunparsedstarttimefile%
 rm %tempdeviceidfile%
 rm %tempfirmwarehashfile%
+rm %tempfirmwarerecordfile%
 
-REM Starttime in quotes because it has embeded spaces
-call airtable-insert.bat "%starttime%" %serialno% %firmwarehash% %deviceid%
- 
-ENDLOCAL
 
-:end
+@if "%errormessage%"=="" (
+	REM Color white on green
+	color 27
+	@echo SUCCESS
+) else (
+	REM Color white on red
+	color 47
+	@echo ERROR !!!  %errormessage% !!!	
+)
+
+@ENDLOCAL
+
