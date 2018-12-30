@@ -43,8 +43,47 @@ set /p firmwarehash=<%tempfirmwarehashfile%
 
 
 REM Lets make sure that this firmware hash is in the airtable firmwares table
-curl https://api.airtable.com/v0/app11MZ4rXXpEyFnj/Firmwares/recG6cEJLSYWvHXHU -H "Authorization: Bearer keyfJVUThzOsPBNNJ"
+REM We have to do this because Airtable is hokey and will not let us create a new record with a linked field
+REM unless we provide the "record ID" of the target of the linked field. :/
 
+curl\bin\curl "https://api.airtable.com/v0/app11MZ4rXXpEyFnj/Firmwares?fields=&filterByFormula=Hash='%firmwarehash%'&maxRecords=1" -H "Authorization: Bearer keyfJVUThzOsPBNNJ" >%tempfirmwarerecordfile%
+if errorlevel 1 (
+	set errormessage=Error with firmware record lookup request on airtable.com
+	goto end
+)
+
+set /p firmwarerecord=<%tempfirmwarerecordfile%
+
+REM  The returned string has embeded quotes. This escapes them so we can use the string. OMG this is so ugly.
+REM https://stackoverflow.com/a/562131/3152071
+REM Note that I had to convert the quotes to "Q" to get this to work otherwise the IF was choking on all the quoted quotes.
+REM No chance of the Q having a collision in this context. 
+
+set firmwarerecordescaped=%firmwarerecord:"=Q%
+
+REM If firmware hash is found, then the returned string from airtable looks {"records":[{"id":"recG6cEJLSYWvHXHU",
+REM If not, then it looks like {"records":[]}
+
+if "%firmwarerecordescaped:~0,14%"=="{QrecordsQ:[]}" (
+	set errormessage=Firmware hash not found in Firmwares table on airtable.com. Add it!
+	goto end
+)
+
+if NOT "%firmwarerecordescaped:~0,19%"=="{QrecordsQ:[{QidQ:Q" (
+	set errormessage=Unexpected format for returned record ID in Firmwares table on airtable.com. 
+	goto end
+)
+
+if NOT "%firmwarerecordescaped:~36,1%"=="Q" (
+	set errormessage=Closing quote not found on returned record ID in Firmwares table on airtable.com. 
+	goto end
+)
+
+set firwarerecordid=%firmwarerecordescaped:~19,17%
+
+echo %firwarerecordid%
+
+goto end
 
 
 REM First lets capture the device ID from the ATMEGA chip
