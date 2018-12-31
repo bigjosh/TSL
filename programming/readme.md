@@ -27,12 +27,17 @@ Try programming a unit with the default offset and then compare the clock time o
 ## Procedure
 
 1. Connect the TSL to the programming jig.
-2. Enter the command `burnthis.bat` on the command line. (Use up arrow or F3 on subsequent passes)
+2. Enter the command `burnthis.bat` on the command line followed by the unit serial number. (Use up arrow or F3 on subsequent passes)
 3. Watch it program.
 4. Remove the TSL and check that is has the correct GMT time on the LCD.
 5. Insert the trigger pin.
 6. Confirm that the TSL goes to Ready To Launch mode and all the segments look good.
 
+### Batch programming mode
+
+If you enter just `burnthis.bat` without specifying a serial number, then you will go into batch programming mode where You will be asked to enter a serial number and after the programming cycle successfully competes then it will ask for the next serial number. 
+
+This works great if you have a bar code scanner to enter the serial numbers.   
 
 ## How it works
 
@@ -46,8 +51,7 @@ First the batch file uses the `tsl-make-block` to create a binary file to be pro
 4. A flag that remembers if the RTC in the TSL has ever reported that it lost power, which we initialize to `not set`.
  
 ### atprogram
-
-Next the batch file uses the `atprogram` command to actually download the firmware flash image and the newly created EEPROM data block into the XMEGA on the TSL.  The `atprogram` is equivalent to `avrdude` but it written by Atmel and runs on Windows and uses the Atmel drivers. We used `atprogram`  because `avrdude` can have problems talking to an `MkII` when Atmel Studio is installed because of USB driver conflicts.  
+The batch file uses the `atprogram` command to actually download the firmware flash image and the newly created EEPROM data block into the XMEGA on the TSL.  The `atprogram` is equivalent to `avrdude` but it written by Atmel and runs on Windows and uses the Atmel drivers. We used `atprogram`  because `avrdude` can have problems talking to an `MkII` when Atmel Studio is installed because of USB driver conflicts.  
 
 #### Fuses
 
@@ -73,4 +77,8 @@ FUSEBYTE2 = 0xFF (valid)
 FUSEBYTE4 = 0xEE (valid)
 FUSEBYTE5 = 0xF7 (valid)
 
+### Airtable integration
 
+The programming cycle automatically inserts a record into the [Units database](https://airtable.com/tblunHqmlHFKtvaZ1/viw4lIvKlyMFLtk5F) for each unit programmed. 
+
+Before creating the record, it checks so make sure there is already a record for the current firmware hash in the [Firmwares database](https://airtable.com/tbl5LY3zBKoeetbQW/viwRVB4nIbvjLaZ3i). If not, then it will fail with an error. If this happens, you need to add a record for the new firmware version.  
