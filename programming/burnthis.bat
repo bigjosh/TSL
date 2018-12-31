@@ -3,6 +3,8 @@ REM Args: Label serial number of the unit to be programmed
 
 SETLOCAL
 
+:nextserial
+
 REM run in default color
 color
 
@@ -16,7 +18,6 @@ IF "%~1" == "" (
 ) else (
 	set serialno=%1
 )
-
 
 REM Update delayseconds to reflect the number of seconds to add to thet start time to account for
 REM the delay in getting everything programmed into the EEPROM
@@ -145,6 +146,8 @@ rm %tempfirmwarerecordfile%
 	REM Color white on green
 	color 27
 	@echo SUCCESS
+	REM Loop back for next unit if we started in scanning batch mode
+	IF "%~1" == "" goto nextserial
 ) else (
 	REM Color white on red
 	color 47
