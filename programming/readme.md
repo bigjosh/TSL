@@ -18,12 +18,27 @@ Find the location of you "atprogram.exe" that was installed with Atmel Studio. I
 
 ### Adjust programming lag offset
 
-The programming procedure takes more than a second to complete, so if we just programmed the current adjusted time then the TSL would end up behind.
+Since all time calculations inside a running TSL are relative, it does not practically matter how accurate the programmed clock time is for normal operation. Having accurate TSL time is nice when a TSL needs to be reset. It is also nice to have it accurate to +/-1 second just so we can keep track of how how much TSLs are drifting in the wild over time.     
+
+The programming procedure takes more than a second to complete, so if we just programmed the current time then the TSL would end up behind.
 
 You can specify a number of seconds to add or subtract to the current time when programming the TSL to account for these delays in the programming process. 
 
-Try programming a unit with the default offset and then compare the clock time on the TSL to the the time on the computer. If the TSL is off by more than +/- 1 second then adjust the value of `offset` in the `burnthis.bat` file and try again. 
+First try programming a unit with the default offset and then compare the clock time on the TSL to the the time on the computer. If the TSL is off by more than +/- 1 second then adjust the value of `offset` in the `burnthis.bat` file and try again.
+
+### Accurate time base
+
+We want the local windows clock to be as accurate as possible since all the TSLs programmed will be based on this time (+/- the lag offset above). You can manually set the windows clock though Windows' settings, but probably best to install an NTP client on the programming computer to always keep it synced.
+
+Here is one that is free and works...
+
+http://www.timesynctool.com/
+
+You can check against the real time here...
+
+https://time.gov/
   
+
 ## Procedure
 
 1. Connect the TSL to the programming jig.
@@ -81,4 +96,21 @@ FUSEBYTE5 = 0xF7 (valid)
 
 The programming cycle automatically inserts a record into the [Units database](https://airtable.com/tblunHqmlHFKtvaZ1/viw4lIvKlyMFLtk5F) for each unit programmed. 
 
-Before creating the record, it checks so make sure there is already a record for the current firmware hash in the [Firmwares database](https://airtable.com/tbl5LY3zBKoeetbQW/viwRVB4nIbvjLaZ3i). If not, then it will fail with an error. If this happens, you need to add a record for the new firmware version.  
+Before creating the record, it checks so make sure there is already a record for the current firmware hash in the [Firmwares database](https://airtable.com/tbl5LY3zBKoeetbQW/viwRVB4nIbvjLaZ3i). If not, then it will fail with an error. If this happens, you need to add a record for the new firmware version.
+
+### Airtable API key 
+
+In order to update the databases in Airtable.com, this batch file needs to know your Airtable API key. You can get it here...
+
+https://airtable.com/account
+
+Copy the value if one is there, hit generate if not.
+
+The first time you run the procedure below, you will be prompted to enter the API key. The key you enter will be stored in the Windows register for the local user on the local computer so you do not need to enter again.
+
+If you ever want to remove the stored API key (you are selling the computer, or you need to enter a new value), you can run this command...
+
+`REG delete HKCU\Environment /V burnthis_airtable_api_key`
+
+...and the next time you run `burnthis.bat`you will be asked to enter a new key.
+    

@@ -3,7 +3,7 @@ REM Args: Label serial number of the unit to be programmed
 
 REM We need the APIKEY to access airtable, but we do not want to store it inside this batch file
 REM since then it would be exposed. So we keep it in the local machine registry under the 
-REM name `burnthis_airtable_api_key`. If you ever want to delet this key, you run the command...
+REM name `burnthis_airtable_api_key`. If you ever want to delete this key, you run the command...
 REM `REG delete HKCU\Environment /V burnthis_airtable_api_key`
 
 color
@@ -11,7 +11,7 @@ color
 REM Update delayseconds to reflect the number of seconds to add to the start time to account for
 REM the delay in getting everything programmed into the EEPROM
 
-set delayseconds=4
+set delayseconds=7
 set firmwarefile=tsl.hex
 
 set tempunparsedstarttimefile=%tmp%\unparsedstarttime.txt
@@ -103,7 +103,7 @@ REM If firmware hash is found, then the returned string from airtable looks {"re
 REM If not, then it looks like {"records":[]}
 
 if "%firmwarerecordescaped:~0,14%"=="{QrecordsQ:[]}" (
-	set errormessage=Firmware hash not found in Firmwares table on airtable.com. Add it!
+	set errormessage=Firmware hash '%firmwarehash%' not found in Firmwares table on airtable.com. Add it!
 	goto end
 )
 
@@ -145,6 +145,8 @@ if errorlevel 1 (
 	goto end
 )
 
+echo Starting time programming sequence at %time%
+
 REM Next lets generate the eeprom block with the current time as start time
 tsl-make-block %tempeepromfile% %delayseconds% | findstr "Start time" >%tempunparsedstarttimefile%
 set /p starttimeline=<%tempunparsedstarttimefile%
@@ -158,6 +160,8 @@ if errorlevel 1 (
 	set errormessage=Error writing eeprom block to XMEGA 
 	goto end
 )
+
+echo Ending time programming sequence at %time%
 
 
 REM Starttime in quotes because it has embeded spaces
@@ -188,6 +192,7 @@ rm %tempfirmwarerecordfile%
 ) else (
 	REM Color white on red
 	color 47
+	@echo ============================================================================================================
 	@echo ERROR !!!  %errormessage% !!!	
 )
 

@@ -886,8 +886,9 @@ EMPTY_INTERRUPT(PORTB_INT0_vect);       // FOUT ISR. We don't care about ISR, ju
 // wait for the 1-second interrupt to wake us up and check it.
 
 void triggerPinEnable() {
+    PORTC.DIRCLR   = PIN7_bm;                                            // Set to input
     PORTC.PIN7CTRL = PORT_OPC_PULLUP_gc | PORT_ISC_BOTHEDGES_gc ;        // Enable pull-up on trigger pin
-    _delay_ms(1);          // Give the pullup a moment to do its thing
+    _delay_ms(1);                                                        // Give the pullup a moment to do its thing
     PORTC.INTCTRL = PORT_INT0LVL0_bm;
     PORTC_INT0MASK |= PIN7_bm;
 }
@@ -900,7 +901,6 @@ void triggerPinDisable() {
     PORTC.PIN7CTRL = PORT_ISC_INPUT_DISABLE_gc;            // Disable pull-up on trigger pin, disable input buffer
     PORTC.OUTCLR   = PIN7_bm;                              // Set low
     PORTC.DIRSET   = PIN7_bm;                              // Set to output (now driving low)
-
 }
 
 inline uint8_t triggerPinPresent() {
