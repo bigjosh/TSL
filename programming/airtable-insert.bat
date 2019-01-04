@@ -1,5 +1,5 @@
 REM Insters a record into the units database on airtable 
-REM Args: Starttime, Serialnumber, Firmware, DeviceID
+REM Args: Starttime, Serialnumber, Firmware, DeviceID, APIkey
 
 SETLOCAL
 REM %~1 will remove enclosing quotes
@@ -7,6 +7,7 @@ set "starttime=%~1"
 set "serialnumber=%2"
 set "firmware=%3"
 set "deviceid=%4"
+set "apikey=%5"
 
 set tempfile=%tmp%\airtablejson.txt
 
@@ -19,6 +20,16 @@ REM This command string comes from airtable...
 REM https://airtable.com/app11MZ4rXXpEyFnj/api/docs#curl/table:units:create
 REM ...but the syntax was a little wrong (like the XPOST?). We also use the `@` for the `-d` command to send data from a file. 
 
-curl\bin\curl -v https://api.airtable.com/v0/app11MZ4rXXpEyFnj/Units -H "Authorization: Bearer keyfJVUThzOsPBNNJ" -d @%tempfile% -H "Content-Type: application/json"
+curl\bin\curl -v https://api.airtable.com/v0/app11MZ4rXXpEyFnj/Units -H "Authorization: Bearer %apikey%" -d @%tempfile% -H "Content-Type: application/json"
 
-rm %tempfile%
+if errorlevel 1 (
+
+	rm %tempfile%
+	ENDLOCAL
+	
+	exit /B 1
+	
+)
+
+exit /B 0 
+
