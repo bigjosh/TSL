@@ -7,7 +7,7 @@
 
 // Shown on Pin `B` diagnostic display.
 
-#define VERSION 102
+#define VERSION 103
 
 // Required AVR Libraries
 #include <avr/io.h>
@@ -892,12 +892,14 @@ void triggerPinEnable() {
     PORTC_INT0MASK |= PIN7_bm;
 }
 
-// Turn off interrupt, disable input buffer
+// Turn off interrupt, ground pin (to hopefully shunt static discharge)
 
 void triggerPinDisable() {
 
     PORTC_INT0MASK &= ~PIN7_bm;                            // Disable interrupt
     PORTC.PIN7CTRL = PORT_ISC_INPUT_DISABLE_gc;            // Disable pull-up on trigger pin, disable input buffer
+    PORTC.OUTCLR   = PIN7_bm;                              // Set low
+    PORTC.DIRSET   = PIN7_bm;                              // Set to output (now driving low)
 
 }
 
