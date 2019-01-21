@@ -26,7 +26,7 @@ if NOT "%burnthis_airtable_api_key%"=="" goto have_api_key
 @echo *** You can get it here...
 @echo *** https://airtable.com/account
 @echo *** You only need to do this once per user/computer.
-@note *** Note this key is stored in plaintext in the registry. 
+@echo *** Note this key is stored in plaintext in the registry. 
 @echo *** Instructions for deleting removing key are
 @echo *** are in the comments of this batch file. 
 SET /p burnthis_airtable_api_key= Airtable API key or blank to quit:	
