@@ -11,8 +11,8 @@ C9,CAP_0603,CAP CER 1UF 10V X7R 0603,Samsung,,Possible,0.016,https://www.digikey
 J1,LCD-7SEG-6DIG,GDC0570 17PIN TN Positive 6 Digit 7 Segment,,DNP,,1.2,https://www.aliexpress.com/item/GDC0570-LCD-Display-Module-Clock-6-Bit-8-Characters-Dynamic-Driving-TN-Type-LCD-Screen-Display/32753320423.html
 J2,LCD-7SEG-6DIG,GDC0570 17PIN TN Positive 6 Digit 7 Segment,,DNP,,1.2,https://www.aliexpress.com/item/GDC0570-LCD-Display-Module-Clock-6-Bit-8-Characters-Dynamic-Driving-TN-Type-LCD-Screen-Display/32753320423.html
 J3,PDI-6,,,DNP,,,
-L1,FLASH_LED,5730 (5630) White 6000K SMD LED Diode Lights Chip,Chanzon,,Possible,0.0711,https://www.amazon.com/gp/product/B01CUGACEA/ref=oh_aui_search_detailpage?ie=UTF8&psc=1
-L2,FLASH_LED,5730 (5630) White 6000K SMD LED Diode Lights Chip,Chanzon,,Possible,0.0711,https://www.amazon.com/gp/product/B01CUGACEA/ref=oh_aui_search_detailpage?ie=UTF8&psc=1
+L1,SM5730UWDN05,	LED, SURFACE MOUNT, SM5730, 0.5W,Bivar,,Possible,0.0711,https://www.digikey.com/product-detail/en/bivar-inc/SM5730UWDN05/492-2162-6-ND/6007622
+L2,SM5730UWDN05,	LED, SURFACE MOUNT, SM5730, 0.5W,Bivar,,Possible,0.0711,https://www.digikey.com/product-detail/en/bivar-inc/SM5730UWDN05/492-2162-6-ND/6007622
 Q1,2N7002K,,NXP-Philips,,Possible,0.05,
 Q2,2N7002K,,NXP-Philips,,Possible,0.05,
 R1,RES_0603,100OHM 5%,,,Yes,0.016,https://www.digikey.com/product-detail/en/susumu/RR0816P-101-D/RR08P100DDKR-ND/579969
