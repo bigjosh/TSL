@@ -957,7 +957,7 @@ void FlashFetOff1() {
 
 // Wait for next LCD frame to start
 // not needed if we are sleeping since the interrupt will
-// wake us at the begining of the frame anyway
+// wake us at the beginning of the frame anyway
 
 
 /* THIS DOES NOT SEEM TO WORK
@@ -2456,15 +2456,9 @@ int main(void)
 
 	sleep_enable();         // This chip needs you to tell it that it is ok to sleep before the sleep instruction will actually work
 
-    initFlashBulbs();            // Enable output on the pins that control the transistors that flash the flash LEDs
-
-    output1onFOEpin();      // Enable the 1Hz output from the RTC via its Frequency Output Enable pin
-
-    FOUT_in_pin_enable();   // Enable an interrupt on the falling edge of the 1Hz FOUT coming from the RTC
-                            // Setting a new time sets FOUT low, and then it goes low again on each new seconds update.
+    initFlashBulbs();       // Enable output on the pins that control the transistors that flash the flash LEDs
 
 
-    sei();                  // Note that our ISRs are empty, we only use interrupts to wake from sleep.
 
     showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
 
@@ -2497,8 +2491,23 @@ int main(void)
     // for waking us from sleep no matter what happens next...
 
     rx8900_fout_1Hz();
+    
+    output1onFOEpin();      // Enable the 1Hz output from the RTC via its Frequency Output Enable pin
 
+    FOUT_in_pin_enable();   // Enable an interrupt on the falling edge of the 1Hz FOUT coming from the RTC
+                            // Setting a new time sets FOUT low, and then it goes low again on each new seconds update.
+
+    sei();                  // Note that our ISRs are empty, we only use interrupts to wake from sleep.    
+    
     clearLCD();
+    
+    eepromErrorMode(9);
+    
+    showDashes();
+    
+    cli();
+    
+    sleep_cpu();
 
     // Diagnostic functions
 

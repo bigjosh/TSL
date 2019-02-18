@@ -10,28 +10,50 @@
 
 #include "lcd.h"
 
+
+//---------------CUT HERE FOR SEG MAP PRINTOUT
+
+// The code between the cut points can be run to print a map of which
+// registers are used for which digits using printRegMap()
+
+// You will need these to make this block compile independently...
+// #include <stdint.h>
+// typedef uint8_t register8_t;
+
+// Maximum number of common lines.
+#define LCD_MAX_NBR_OF_COM  4
+// Maximum number of segment lines.
+#define LCD_MAX_NBR_OF_SEG  25
+
 // Map LCD segments to registers
 // compute at compile time
 // Taken from 25.5.11 DATA – LCD Data Memory Mapping
 
+// Return the offset of the register that holds the requested pixel
 
-// This function is used to turn on individual icons on the display.
-inline void lcd_set_pixel(uint8_t pix_com, uint8_t pix_seg) {
-	register8_t *pixreg = (register8_t *)((uint16_t)&LCD.DATA0)
-	+ (pix_com * ((LCD_MAX_NBR_OF_SEG + 7) / 8))
-	+ (pix_seg / 8);
-
-	*pixreg |= 1 << (pix_seg % 8);
+inline static uint8_t LCD_REG_OFF( uint8_t com , uint8_t seg ) {
+    
+    uint8_t reg = ( com * ((LCD_MAX_NBR_OF_SEG + 7) / 8)) + ( seg / 8);
+    
+    return reg;
 }
 
-// This function is used to turn off individual icons on the display.
-inline void lcd_clear_pixel(uint8_t pix_com, uint8_t pix_seg) {
-	register8_t *pixreg = (register8_t *)((uint16_t)&LCD.DATA0)
-	+ (pix_com * ((LCD_MAX_NBR_OF_SEG + 7) / 8))
-	+ (pix_seg / 8);
 
-	*pixreg &= ~(1 << (pix_seg % 8));
-}
+// LCD FONT----
+
+// Map 7 segments A-G to internal representation bits
+// A=0b00000001, B=0b00000010, etc
+// Just luck that 7 segments fits into an 8 bit byte
+
+#define LCD_SEG_BIT( letter ) ( 1 << (letter - 'A') )
+
+#define SEG_A LCD_SEG_BIT('A')
+#define SEG_B LCD_SEG_BIT('B')
+#define SEG_C LCD_SEG_BIT('C')
+#define SEG_D LCD_SEG_BIT('D')
+#define SEG_E LCD_SEG_BIT('E')
+#define SEG_F LCD_SEG_BIT('F')
+#define SEG_G LCD_SEG_BIT('G')
 
 
 const uint8_t lcd_font_digits[] = {
@@ -264,6 +286,155 @@ const lcd_visible_segment  digitmap[][7] = {
 
 
 };
+
+
+#include <stdio.h>
+
+// Total number of LCD registers
+#define LCD_REG_COUNT (((LCD_MAX_NBR_OF_SEG + 7)/8)*LCD_MAX_NBR_OF_COM)
+
+// For each of the LCD data regs, put an X if any pixel of the digit touches that reg
+// Good for getting a view of which digits impact other digits when updating
+
+
+void printLcdMap() {
+    
+    // Step though each register, listing them vertically down the page
+
+    printf("### LCD register usage by digit map\r\n");
+
+    // Print table header
+
+    printf("\r\n| Reg  | ");
+
+    for( uint8_t dc=0; dc<12;dc++ ) {
+        // Digit #11 is the leftmost on the display
+        
+        uint8_t d= 11-dc;
+        printf("%0.02d | " , d );
+
+    }
+
+
+    printf("\r\n| ---  | ");
+
+    for( uint8_t dc=0; dc<12;dc++ ) {
+        // Digit #11 is the leftmost on the display
+        
+        uint8_t d= 11-dc;
+        printf("-- | " );
+
+    }
+
+
+    // Print rows
+    
+    for( uint8_t reg = 0; reg <= LCD_REG_COUNT ; reg++ ) {
+        
+        printf( "\r\n| [%2.2d] |" , reg );
+        
+        
+        // Step though each of the 12 digits, listing them horizontally across the page
+        
+        
+        for( uint8_t dc=0; dc<12;dc++ ) {
+            
+            
+            // Digit #11 is the leftmost on the display
+            
+            uint8_t d= 11-dc;
+            
+            // step though the pixels in this digit to see if current register is used.
+            
+            // Note that a register can be used multiple times by the same digit, be we only care if it is used at all
+            uint8_t reg_used_flag = 0;
+            
+            for( uint8_t p=0; p<8;p++ ) {
+                
+                const lcd_visible_segment current_pixel = digitmap[d][p];
+                
+                if ( reg == LCD_REG_OFF( current_pixel.com , current_pixel.seg )  ) {
+                    
+                    reg_used_flag = 1 ;
+                    
+                }
+                
+            }
+            
+            printf( "  %c |" , reg_used_flag ? 'X' : ' ');
+            
+        }
+        
+    }
+    
+}
+
+
+
+// For each of the LCD data regs, put an X if any pixel of the digit touches that reg
+// Good for getting a view of which digits impact other digits when updating
+
+void printLcdLocationMap() {
+    
+    // Step though each pixel in each digit and show which register it is in
+
+    printf("\r\n\r\n### LCD register by pixel map (register:bit)\r\n");
+
+    // Print table header
+
+    printf("\r\n| Digit | A | B | C | D | E | F |\r\n");
+    printf("| - | - | - | - | - | - | - |\r\n");
+
+    // Print rows
+    
+    // Step though each of the 12 digits, listing them horizontally across the page
+    
+    
+    for( uint8_t dc=0; dc<12;dc++ ) {
+        
+        
+        // Digit #11 is the leftmost on the display
+        
+        uint8_t d= 11-dc;
+        
+        printf("| %0.02d | " , d );
+        
+        // step though the pixels in this digit and print the register used (A-F = 7 pixels)
+        
+        for( uint8_t p=0; p<8;p++ ) {
+            
+            const lcd_visible_segment current_pixel = digitmap[d][p];
+            
+            printf( " %02.2d:%1.1d |"  , LCD_REG_OFF( current_pixel.com , current_pixel.seg ) ,  current_pixel.seg % 8 );
+            
+        }
+        
+        printf( "\r\n");
+        
+    }
+    
+}
+
+//---------------- END CUT
+
+
+// This function is used to turn on individual icons on the display.
+inline void lcd_set_pixel(uint8_t pix_com, uint8_t pix_seg) {
+    register8_t *pixreg = (register8_t *)((uint16_t)&LCD.DATA0)
+    + (pix_com * ((LCD_MAX_NBR_OF_SEG + 7) / 8))
+    + (pix_seg / 8);
+
+    *pixreg |= 1 << (pix_seg % 8);
+}
+
+// This function is used to turn off individual icons on the display.
+inline void lcd_clear_pixel(uint8_t pix_com, uint8_t pix_seg) {
+    register8_t *pixreg = (register8_t *)((uint16_t)&LCD.DATA0)
+    + (pix_com * ((LCD_MAX_NBR_OF_SEG + 7) / 8))
+    + (pix_seg / 8);
+
+    *pixreg &= ~(1 << (pix_seg % 8));
+}
 
 
 

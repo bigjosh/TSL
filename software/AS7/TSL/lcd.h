@@ -11,10 +11,7 @@
 
 #define LCD_DIGITS  12      // 6 per module * 2 modules
 
-// Maximum number of common lines.
-#define LCD_MAX_NR_OF_COM  4
-// Maximum number of segment lines.
-#define LCD_MAX_NBR_OF_SEG  25
+
 
 /*
 #define LCD_MEM_REG( pixel_com , pixel_seg ) _SFR_MEM8( LCD.DATA0 + (  pixel_com * ( (MAX_SEG+7)/8) ) + (pixel_seg / 8 ) )
@@ -139,21 +136,7 @@ void showReset();
 
 void showbAdint();
 
-// LCD FONT----
 
-// Map 7 segments A-G to internal representation bits
-// A=0b00000001, B=0b00000010, etc
-// Just luck that 7 segments fits into an 8 bit byte
-
-#define LCD_SEG_BIT( letter ) ( 1 << (letter - 'A') )
-
-#define SEG_A LCD_SEG_BIT('A')
-#define SEG_B LCD_SEG_BIT('B')
-#define SEG_C LCD_SEG_BIT('C')
-#define SEG_D LCD_SEG_BIT('D')
-#define SEG_E LCD_SEG_BIT('E')
-#define SEG_F LCD_SEG_BIT('F')
-#define SEG_G LCD_SEG_BIT('G')
 
 // Which segments A-G do we turn on for each of the displayed chars 0-9
 
