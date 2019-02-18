@@ -20,9 +20,9 @@
 // #include <stdint.h>
 // typedef uint8_t register8_t;
 
-// Maximum number of common lines.
+// Maximum number of common lines. Defined in datasheets.
 #define LCD_MAX_NBR_OF_COM  4
-// Maximum number of segment lines.
+// Maximum number of segment lines. Defined in datasheets.
 #define LCD_MAX_NBR_OF_SEG  25
 
 // Map LCD segments to registers
@@ -157,7 +157,7 @@ typedef struct {
 // Maps segments in each digit to corresponding SEG and COM pin
 // 0=rightmost digit, 11=leftmost
 
-const lcd_visible_segment  digitmap[][7] = {
+const lcd_visible_segment  digitmap[12][7] = {
 
     // Right LCD
 
@@ -311,7 +311,7 @@ void printLcdMap() {
         // Digit #11 is the leftmost on the display
         
         uint8_t d= 11-dc;
-        printf("%0.02d | " , d );
+        printf("%2.2d | " , d );
 
     }
 
@@ -321,7 +321,6 @@ void printLcdMap() {
     for( uint8_t dc=0; dc<12;dc++ ) {
         // Digit #11 is the leftmost on the display
         
-        uint8_t d= 11-dc;
         printf("-- | " );
 
     }
@@ -349,7 +348,7 @@ void printLcdMap() {
             // Note that a register can be used multiple times by the same digit, be we only care if it is used at all
             uint8_t reg_used_flag = 0;
             
-            for( uint8_t p=0; p<8;p++ ) {
+            for( uint8_t p=0; p<7;p++ ) {
                 
                 const lcd_visible_segment current_pixel = digitmap[d][p];
                 
@@ -397,15 +396,15 @@ void printLcdLocationMap() {
         
         uint8_t d= 11-dc;
         
-        printf("| %0.02d | " , d );
+        printf("| %2.2d | " , d );
         
         // step though the pixels in this digit and print the register used (A-F = 7 pixels)
         
-        for( uint8_t p=0; p<8;p++ ) {
+        for( uint8_t p=0; p<7;p++ ) {
             
             const lcd_visible_segment current_pixel = digitmap[d][p];
             
-            printf( " %02.2d:%1.1d |"  , LCD_REG_OFF( current_pixel.com , current_pixel.seg ) ,  current_pixel.seg % 8 );
+            printf( " %2.2d:%1.1d |"  , LCD_REG_OFF( current_pixel.com , current_pixel.seg ) ,  current_pixel.seg % 8 );
             
         }
         
