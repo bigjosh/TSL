@@ -370,6 +370,8 @@ void printLcdMap() {
 
 
 
+
+
 // For each of the LCD data regs, put an X if any pixel of the digit touches that reg
 // Good for getting a view of which digits impact other digits when updating
 
@@ -412,6 +414,62 @@ void printLcdLocationMap() {
         
     }
     
+}
+
+// Print the linear progression of LCD steps as digits increment
+
+void printLcdSegSteps() {
+    
+    printf("\r\n\r\n### LCD changes by digit\r\n");
+    
+    // Print table header
+
+    printf("\r\n| Digit |  COM0 | COM1 | COM2 | COM3 | \r\n");
+    printf("| - | - | - | - | - | \r\n");
+
+    // Print rows
+    
+    uint8_t coms[LCD_MAX_NBR_OF_COM];
+    
+    coms[0]=LCD_COM_L1;
+    coms[1]=LCD_COM_L2;
+    coms[2]=LCD_COM_L3;
+    coms[3]=LCD_COM_L4;
+    
+    uint8_t prev_pixels=0;      // So we can track what changes
+    
+    for(uint8_t c=0; c<13; c++  ) {     // We count up to 11 so we can see the transition from 9 to 0 to 1
+        
+        uint8_t digit = c % 10; 
+        
+        uint8_t current_pixels = lcd_font_digits[digit];
+        
+        printf( "| %2.2d |" , digit );
+        
+        // Step though each com to see if its register for this digit had to change        
+               
+        for( uint8_t com=0;com<LCD_MAX_NBR_OF_COM;com++) {        
+            
+            uint8_t com_changed_flag=0;            
+            
+            for( uint8_t p =0; p<7 ;p++ ) {
+                
+                // Check to see if (1) this pixel changed since last digit, and (2) this pixel is on the COM we are checking right now.
+                
+                if ( ((prev_pixels & (1<<p)) !=  ( current_pixels & (1<<p))) && (digitmap[digit][p].com==coms[com])  )    {
+                    com_changed_flag=1;
+                }
+            
+            }
+            
+            printf( " %c |" , com_changed_flag ? 'X' : ' '  );
+        }
+        
+        prev_pixels = current_pixels; 
+        
+        printf("\r\n");
+            
+    }    
 }
 
 //---------------- END CUT
