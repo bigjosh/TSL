@@ -2337,6 +2337,79 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
 }
 
+// Count 0-9
+
+void emittedLcdCounter() {
+    
+    asm("nop");    
+    asm("ldi r18,0xc0":::"r18");  // Was 00
+    asm("sts 0x0d12,r18");
+    asm("ldi r18,0x40":::"r18");  // Was 00
+    asm("sts 0x0d16,r18");
+    asm("ldi r18,0xc0":::"r18");  // Was 00
+    asm("sts 0x0d1a,r18");
+    asm("ldi r18,0x80":::"r18");  // Was 00
+    asm("sts 0x0d1e,r18");
+    asm("sleep");  // Step 0
+    asm("ldi r18,0x80":::"r18");  // Was c0
+    asm("sts 0x0d12,r18");
+    asm("ldi r18,0x00":::"r18");  // Was 40
+    asm("sts 0x0d16,r18");
+    asm("ldi r18,0x80":::"r18");  // Was c0
+    asm("sts 0x0d1a,r18");
+    asm("ldi r18,0x00":::"r18");  // Was 80
+    asm("sts 0x0d1e,r18");
+    asm("sleep");  // Step 1
+    asm("ldi r18,0x40":::"r18");  // Was 80
+    asm("sts 0x0d12,r18");
+    asm("ldi r18,0xc0":::"r18");  // Was 00
+    asm("sts 0x0d16,r18");
+    asm("ldi r18,0x80":::"r18");  // Was 00
+    asm("sts 0x0d1e,r18");
+    asm("sleep");  // Step 2
+    asm("ldi r18,0xc0":::"r18");  // Was 40
+    asm("sts 0x0d12,r18");
+    asm("ldi r18,0x80":::"r18");  // Was c0
+    asm("sts 0x0d16,r18");
+    asm("sleep");  // Step 3
+    asm("ldi r18,0x80":::"r18");  // Was c0
+    asm("sts 0x0d12,r18");
+    asm("ldi r18,0xc0":::"r18");  // Was 80
+    asm("sts 0x0d1a,r18");
+    asm("ldi r18,0x00":::"r18");  // Was 80
+    asm("sts 0x0d1e,r18");
+    asm("sleep");  // Step 4
+    asm("ldi r18,0xc0":::"r18");  // Was 80
+    asm("sts 0x0d12,r18");
+    asm("ldi r18,0x40":::"r18");  // Was c0
+    asm("sts 0x0d1a,r18");
+    asm("ldi r18,0x80":::"r18");  // Was 00
+    asm("sts 0x0d1e,r18");
+    asm("sleep");  // Step 5
+    asm("ldi r18,0xc0":::"r18");  // Was 80
+    asm("sts 0x0d16,r18");
+    asm("sleep");  // Step 6
+    asm("ldi r18,0x80":::"r18");  // Was c0
+    asm("sts 0x0d12,r18");
+    asm("ldi r18,0x00":::"r18");  // Was c0
+    asm("sts 0x0d16,r18");
+    asm("ldi r18,0x80":::"r18");  // Was 40
+    asm("sts 0x0d1a,r18");
+    asm("sleep");  // Step 7
+    asm("ldi r18,0xc0":::"r18");  // Was 80
+    asm("sts 0x0d12,r18");
+    asm("ldi r18,0xc0":::"r18");  // Was 00
+    asm("sts 0x0d16,r18");
+    asm("ldi r18,0xc0":::"r18");  // Was 80
+    asm("sts 0x0d1a,r18");
+    asm("sleep");  // Step 8
+    asm("ldi r18,0x80":::"r18");  // Was c0
+    asm("sts 0x0d16,r18");
+    asm("sleep");  // Step 9
+        asm("nop");
+}
+
+
 
 void showPinBPhase1() {
 
@@ -2500,13 +2573,9 @@ int main(void)
     sei();                  // Note that our ISRs are empty, we only use interrupts to wake from sleep.    
     
     clearLCD();
-    
-    eepromErrorMode(9);
-    
+        
     showDashes();
-    
-    cli();
-    
+        
     sleep_cpu();
 
     // Diagnostic functions
@@ -2558,6 +2627,21 @@ int main(void)
     diagnostic_out_PinT_0();
 
     */
+    
+    #warning
+    
+    
+    /*
+    while (1) {
+        
+        for(uint8_t i=0; i<10;i++) {
+            digitShow( 0 , i  );
+            sleep_cpu();
+        }
+        
+        };  
+    */
+    while (1) emittedLcdCounter();
 
     if ( check_low_battery() ) {
 

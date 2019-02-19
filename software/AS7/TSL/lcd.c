@@ -39,6 +39,15 @@ inline static uint8_t LCD_REG_OFF( uint8_t com , uint8_t seg ) {
 }
 
 
+// Return the bit in the register that holds the requested pixel
+
+inline static uint8_t LCD_REG_BIT( uint8_t com , uint8_t seg ) {
+    
+    return  seg % 8;
+    
+}
+
+
 // LCD FONT----
 
 // Map 7 segments A-G to internal representation bits
@@ -54,6 +63,21 @@ inline static uint8_t LCD_REG_OFF( uint8_t com , uint8_t seg ) {
 #define SEG_E LCD_SEG_BIT('E')
 #define SEG_F LCD_SEG_BIT('F')
 #define SEG_G LCD_SEG_BIT('G')
+
+/*
+
+    NOTE: LCD modules are mounted upside down for maximum contrast when viewed from
+          30 deg above
+          
+    Here is the segment map in the upside down position:
+
+        D
+    C       E
+        G
+    B       F
+        A
+
+*/
 
 
 const uint8_t lcd_font_digits[] = {
@@ -435,9 +459,7 @@ void printLcdSegSteps() {
     coms[1]=LCD_COM_L2;
     coms[2]=LCD_COM_L3;
     coms[3]=LCD_COM_L4;
-    
-    
-    
+            
     uint8_t prev_pixels=0;      // So we can track what changes
     
     for(uint8_t c=0; c<13; c++  ) {     // We count up to 11 so we can see the transition from 9 to 0 to 1
@@ -497,9 +519,11 @@ void emit_code_for_lcd_steps( lcd_reg_state initial_lcd_reg_state, lcd_reg_state
         for( uint8_t r=0; r<LCD_REG_COUNT ; r++) {
             
              if ( regs_now.regs[r] != regs_next.regs[r] ) {           
+                 
+                 // Note: we use R18 becuase it is not expected to be saved across calls and LDI needs a register higher than r16 so we can't use temp_reg
         
-                 printf("asm(\"ldi r0,$%2.2x\");  // Was %2.2x\r\n" , regs_next.regs[r] , regs_now.regs[r] );
-                 printf("asm(\"sts $%4.4x,r0\");\r\n" , 0x0D00 + 0x0010 + r );            // 0D00 is the base of the LCD memory, 0x0010 is where the display registers start
+                 printf("asm(\"ldi r18,0x%2.02x\":::\"r18\");  // Was %2.2x\r\n" , regs_next.regs[r] , regs_now.regs[r] );
+                 printf("asm(\"sts 0x%4.04x,r18\");\r\n" , 0x0D00 + 0x0010 + r );            // 0D00 is the base of the LCD memory, 0x0010 is where the display registers start
              
                 regs_now.regs[r] = regs_next.regs[r];
                 
@@ -535,14 +559,14 @@ void lcdEmitCode( ) {
         
         lcd_reg_state lcd_regs = regs_zero;
         
-        // Step though all the pixels         
+        // Step though all the pixels in the current digit and see which ones are lit
         for( uint8_t p = 0; p<7;p++) {
             
             if ( lcd_font_digits[c] & (1<<p) ) {
                 
                 // This pixel is lit, so set the bit in the show regs
                 
-                lcd_regs.regs[ LCD_REG_OFF( digitmap[place][p].com , digitmap[place][p].seg) ] |= 1<<p;
+                lcd_regs.regs[ LCD_REG_OFF( digitmap[place][p].com , digitmap[place][p].seg) ] |= ( 1<< LCD_REG_BIT( digitmap[place][p].com , digitmap[place][p].seg) ) ;
                                                 
             }
             
@@ -557,6 +581,7 @@ void lcdEmitCode( ) {
     emit_code_for_lcd_steps( regs_init , reg_steps , 10  );
     
 }
+
 
 //---------------- END CUT
 
