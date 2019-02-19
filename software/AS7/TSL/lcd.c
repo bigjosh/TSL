@@ -436,6 +436,8 @@ void printLcdSegSteps() {
     coms[2]=LCD_COM_L3;
     coms[3]=LCD_COM_L4;
     
+    
+    
     uint8_t prev_pixels=0;      // So we can track what changes
     
     for(uint8_t c=0; c<13; c++  ) {     // We count up to 11 so we can see the transition from 9 to 0 to 1
@@ -470,6 +472,90 @@ void printLcdSegSteps() {
         printf("\r\n");
             
     }    
+}
+
+// A snapshot of the LCD regs
+
+typedef struct {
+    uint8_t regs[LCD_REG_COUNT];
+} lcd_reg_state ;    
+    
+
+// Just to have a zeroed out one to copy    
+    
+lcd_reg_state regs_zero;    
+    
+
+void emit_code_for_lcd_steps( lcd_reg_state initial_lcd_reg_state, lcd_reg_state sequence_of_lcd_reg_states[] , int sequence_count ) {
+    
+    lcd_reg_state regs_now = initial_lcd_reg_state;
+    
+    for( int i=0; i<sequence_count; i++ ) {
+        
+        lcd_reg_state regs_next = sequence_of_lcd_reg_states[i];
+        
+        for( uint8_t r=0; r<LCD_REG_COUNT ; r++) {
+            
+             if ( regs_now.regs[r] != regs_next.regs[r] ) {           
+        
+                 printf("asm(\"ldi r0,$%2.2x\");  // Was %2.2x\r\n" , regs_next.regs[r] , regs_now.regs[r] );
+                 printf("asm(\"sts $%4.4x,r0\");\r\n" , 0x0D00 + 0x0010 + r );            // 0D00 is the base of the LCD memory, 0x0010 is where the display registers start
+             
+                regs_now.regs[r] = regs_next.regs[r];
+                
+             }                
+                
+         }
+
+         printf("asm(\"sleep\");  // Step %d \r\n" ,  i );
+                  
+     }
+     
+                
+}
+
+// Emit code to update the LCD
+// Digits 0-9 in digit 0
+
+void lcdEmitCode( ) {
+    
+   
+    // Current place on the display to update 
+    const uint8_t place =0; // Start with digit 0 (rightmost)
+    
+    lcd_reg_state regs_init = regs_zero;
+    
+    lcd_reg_state reg_steps[10];
+    
+    // COunt 0-9    
+    for( uint8_t c =0; c<10;c++ ) {
+        
+        // The value the LCD regs should have when we are done to show the digit
+        // Init to all 0 so we only need to set pixels that should be on.
+        
+        lcd_reg_state lcd_regs = regs_zero;
+        
+        // Step though all the pixels         
+        for( uint8_t p = 0; p<7;p++) {
+            
+            if ( lcd_font_digits[c] & (1<<p) ) {
+                
+                // This pixel is lit, so set the bit in the show regs
+                
+                lcd_regs.regs[ LCD_REG_OFF( digitmap[place][p].com , digitmap[place][p].seg) ] |= 1<<p;
+                                                
+            }
+            
+        }
+        
+        // Ok, now the shadow_regs_next have the values that should be in the LCD registers when we are done.
+        
+        reg_steps[c] = lcd_regs;
+        
+    }    
+    
+    emit_code_for_lcd_steps( regs_init , reg_steps , 10  );
+    
 }
 
 //---------------- END CUT
