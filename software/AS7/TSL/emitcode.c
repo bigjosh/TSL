@@ -1,15 +1,3 @@
-/*
- * LCD.c
- *
- * Created: 1/12/2018 5:16:42 PM
- *  Author: josh
- */
-
-// Required AVR Libraries
-#include <avr/io.h>
-
-#include "lcd.h"
-
 
 //---------------CUT HERE FOR SEG MAP PRINTOUT
 
@@ -31,7 +19,7 @@
 
 // Map LCD segments to registers
 // compute at compile time
-// Taken from 25.5.11 DATA – LCD Data Memory Mapping
+// Taken from 25.5.11 DATA â€“ LCD Data Memory Mapping
 
 // Return the offset of the register that holds the requested pixel
 
@@ -315,8 +303,6 @@ const lcd_visible_segment  digitmap[12][7] = {
 
 };
 
-/*
-
 #include <stdio.h>
 
 // Total number of LCD registers
@@ -512,6 +498,11 @@ typedef struct {
 
 lcd_reg_state regs_zero;
 
+
+// Just to have a zeroed out one to copy
+
+lcd_reg_state regs_zero;
+
 // Actually write out the code block.
 // Note that we want the entire list of all state changes here at once rather than taking them one at a time.
 // This lets us potentially do global optimizations on them. 
@@ -530,8 +521,8 @@ void emit_code_for_lcd_steps( lcd_reg_state initial_lcd_reg_state, lcd_reg_state
                 
                 // Note: we use R18 becuase it is not expected to be saved across calls and LDI needs a register higher than r16 so we can't use temp_reg
                 
-                printf("asm(\"ldi r18,0x%2.02x\":::\"r18\");  // Was %2.2x\n" , regs_next.regs[r] , regs_now.regs[r] );
-                printf("asm(\"sts 0x%4.04x,r18\");\n" , 0x0D00 + 0x0010 + r );            // 0D00 is the base of the LCD memory, 0x0010 is where the display registers start
+                printf("asm(\"ldi r18,0x%2.02x\":::\"r18\");  // Was %2.2x\r\n" , regs_next.regs[r] , regs_now.regs[r] );
+                printf("asm(\"sts 0x%4.04x,r18\");\r\n" , 0x0D00 + 0x0010 + r );            // 0D00 is the base of the LCD memory, 0x0010 is where the display registers start
                 
                 regs_now.regs[r] = regs_next.regs[r];
                 
@@ -539,7 +530,7 @@ void emit_code_for_lcd_steps( lcd_reg_state initial_lcd_reg_state, lcd_reg_state
             
         }
 
-        printf("asm(\"sleep\");  // Step %d \n" ,  i );
+        printf("asm(\"sleep\");  // Step %d \r\n" ,  i );
         
     }
     
@@ -561,7 +552,7 @@ void setlcdregsfordigit( lcd_reg_state *lcd_regs , uint8_t place , uint8_t n ) {
             
             lcd_regs->regs[ LCD_REG_OFF( digitmap[place][p].com , digitmap[place][p].seg) ] |= ( 1<< LCD_REG_BIT( digitmap[place][p].com , digitmap[place][p].seg) ) ;
 
-            //printf("set place=%d n=%d p=%d\r\n",place,n,p);
+            printf("set place=%d n=%d p=%d\r\n",place,n,p);
             
         }
         
@@ -586,7 +577,7 @@ void lcdEmit1hourCode( ) {
         
         for( uint8_t s=0; s<60; s++ ) {
 
-            //printf("m=%d s=%d\r\n",m,s);
+            printf("m=%d s=%d\r\n",m,s);
 
 
             // Init to all 0 so we only need to set pixels that should be on.
@@ -610,7 +601,7 @@ void lcdEmit1hourCode( ) {
         
     }
 
-    //printf("step=%d\r\n",step);
+    printf("step=%d\r\n",step);
 
     emit_code_for_lcd_steps( regs_init , reg_steps , step  );
     
@@ -621,464 +612,5 @@ void lcdEmit1hourCode( ) {
 void main() {
     lcdEmit1hourCode();
 }
-*/
 
 //---------------- END CUT
-
-
-// This function is used to turn on individual icons on the display.
-inline void lcd_set_pixel(uint8_t pix_com, uint8_t pix_seg) {
-    register8_t *pixreg = (register8_t *)((uint16_t)&LCD.DATA0)
-    + (pix_com * ((LCD_MAX_NBR_OF_SEG + 7) / 8))
-    + (pix_seg / 8);
-
-    *pixreg |= 1 << (pix_seg % 8);
-}
-
-// This function is used to turn off individual icons on the display.
-inline void lcd_clear_pixel(uint8_t pix_com, uint8_t pix_seg) {
-    register8_t *pixreg = (register8_t *)((uint16_t)&LCD.DATA0)
-    + (pix_com * ((LCD_MAX_NBR_OF_SEG + 7) / 8))
-    + (pix_seg / 8);
-
-    *pixreg &= ~(1 << (pix_seg % 8));
-}
-
-
-
-void digitShow( uint8_t d,  uint8_t n ) {
-
-    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
-
-            lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-
-        } else {
-
-            lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-
-        }
-    }
-}
-
-
-void digitOn(  uint8_t n , uint8_t d ) {
-
-    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
-
-            lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-
-        }
-    }
-}
-
-
-void segmentsOn( uint8_t segementBitsInThisDigit,  uint8_t d ) {
-
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
-
-            lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-
-        }
-    }
-}
-
-void showDash(uint8_t n ) {
-
-    segmentsOn( lcd_font_char_dash , n );
-
-}
-
-void lcd_show_fontchar( uint8_t segs , uint8_t d ) {
-    segmentsOn( segs , d );
-}
-
-void showNoTrig() {
-    segmentsOn( lcd_font_char_n , 11 );
-    segmentsOn( lcd_font_char_o , 10 );
-
-    segmentsOn( lcd_font_char_t , 5 );
-    segmentsOn( lcd_font_char_r , 4 );
-    segmentsOn( lcd_font_char_i , 3 );
-    segmentsOn( lcd_font_char_G , 2 );
-
-
-}
-
-void showClocError() {
-    segmentsOn( lcd_font_char_c , 11 );
-    segmentsOn( lcd_font_char_L , 10 );
-    segmentsOn( lcd_font_char_o ,  9 );
-    segmentsOn( lcd_font_char_c ,  8 );
-
-    segmentsOn( lcd_font_char_E , 5 );
-    segmentsOn( lcd_font_char_r , 4 );
-    segmentsOn( lcd_font_char_r , 3 );
-    segmentsOn( lcd_font_char_o , 2 );
-    segmentsOn( lcd_font_char_r , 1 );
-}
-
-void showSetCloc() {
-
-    segmentsOn( lcd_font_char_S , 11 );
-    segmentsOn( lcd_font_char_E , 10 );
-    segmentsOn( lcd_font_char_t ,  9 );
-
-
-    segmentsOn( lcd_font_char_c ,  5 );
-    segmentsOn( lcd_font_char_L ,  4 );
-    segmentsOn( lcd_font_char_o ,  3 );
-    segmentsOn( lcd_font_char_c ,  2 );
-
-}
-
-void showReset() {
-
-    segmentsOn( lcd_font_char_r , 11 );
-    segmentsOn( lcd_font_char_E , 10 );
-    segmentsOn( lcd_font_char_S ,  9 );
-    segmentsOn( lcd_font_char_E ,  8 );
-    segmentsOn( lcd_font_char_t ,  7 );
-
-}
-
-
-
-void showbAdint() {
-    segmentsOn( lcd_font_char_b , 11 );
-    segmentsOn( lcd_font_char_A , 10 );
-    segmentsOn( lcd_font_char_d ,  9 );
-
-    segmentsOn( lcd_font_char_i , 5 );
-    segmentsOn( lcd_font_char_n , 4 );
-    segmentsOn( lcd_font_char_t , 3 );
-}
-
-
-void showEEProError( uint8_t code ) {
-    segmentsOn( lcd_font_char_E , 11 );
-    segmentsOn( lcd_font_char_E , 10 );
-    segmentsOn( lcd_font_char_P ,  9 );
-    segmentsOn( lcd_font_char_r ,  8 );
-    segmentsOn( lcd_font_char_o ,  7 );
-
-    segmentsOn( lcd_font_char_E , 5 );
-    segmentsOn( lcd_font_char_r , 4 );
-    segmentsOn( lcd_font_char_r , 3 );
-    segmentsOn( lcd_font_char_o , 2 );
-    segmentsOn( lcd_font_char_r , 1 );
-    digitOn(  code , 0 );
-
-}
-
-// The text part of the Pin B Phase 1 diagnostics display
-// (space left for numbers to be filled in)
-
-void showPinBPhase3Text() {
-
-    // Show "VOLT" on left LCD
-
-    segmentsOn( lcd_font_char_V , 9 );
-    segmentsOn( lcd_font_char_o , 8 );
-    segmentsOn( lcd_font_char_l , 7 );
-    segmentsOn( lcd_font_char_t , 6 );
-
-    // Show "VER" on right LCD
-
-    segmentsOn( lcd_font_char_V , 5 );
-    segmentsOn( lcd_font_char_E , 4 );
-    segmentsOn( lcd_font_char_r , 3 );
-
-}
-
-
-void showc2018JOSH() {
-
-    segmentsOn(  lcd_font_char_c , 11 );
-    digitOn(  2 ,10 );
-    digitOn(  0 , 9 );
-    digitOn(  1 , 8 );
-    digitOn(  8 , 7 );
-
-    segmentsOn( lcd_font_char_J , 5 );
-    segmentsOn( lcd_font_char_O , 4 );
-    segmentsOn( lcd_font_char_S , 3 );
-    segmentsOn( lcd_font_char_H , 2 );
-}
-
-
-void digitOff( uint8_t d,  uint8_t n ) {
-
-    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments in the digit
-
-        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
-
-            lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-        }
-    }
-}
-
-// Blank out the specified digit
-
-void digitBlank( uint8_t d ) {
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments in the digit
-
-        lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-    }
-}
-
-
-// Display the decimal digit n (0-9) at position d (0-11 where 0 is leftmost) dark if onFlag, light if not
-
-void displaydigit( uint8_t d,  uint8_t n , uint8_t onFlag) {
-
-    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
-
-            if (onFlag) {
-                lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-            } else {
-                lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-            }
-
-        }
-    }
-}
-
-
-
-
-void displaydigit01O() {
-
-    uint8_t d =10;
-    uint8_t n =1;
-    uint8_t onFlag = 1;
-
-    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
-
-            if (onFlag) {
-                lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-                } else {
-                lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-            }
-
-        }
-    }
-}
-
-
-void displaydigit01F() {
-
-    uint8_t d =10;
-    uint8_t n =1;
-    uint8_t onFlag = 0;
-
-    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
-
-            if (onFlag) {
-                lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-                } else {
-                lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-            }
-
-        }
-    }
-}
-
-
-void displaydigit02O() {
-
-    uint8_t d =10;
-    uint8_t n =2;
-    uint8_t onFlag = 1;
-
-    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
-
-            if (onFlag) {
-                lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-                } else {
-                lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-            }
-
-        }
-    }
-}
-
-
-void displaydigit02F() {
-
-    uint8_t d =10;
-    uint8_t n =2;
-    uint8_t onFlag = 0;
-
-    uint8_t segementBitsInThisDigit = lcd_font_digits[ n ];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBitsInThisDigit ) {
-
-            if (onFlag) {
-                lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-                } else {
-                lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-            }
-
-        }
-    }
-}
-
-
-
-// Battery icon
-// Level = 0-3
-// Level 0 is the outline
-
-// Just happens to work out that the different level indicators are on coresponding COM lines on the same SEG
-
-void battSegOn( uint8_t level) {
-    lcd_set_pixel( level ,  LCD_SEG_L01 );
-
-}
-
-void battSegOff(uint8_t level) {
-    lcd_clear_pixel( level ,  LCD_SEG_L01 );
-}
-
-
-// Colons between 4th and 5th digit on each module
-
-void colonLOn() {
-    lcd_set_pixel( LCD_COM_L4 ,  LCD_SEG_L05 );
-
-}
-
-void colonLOff() {
-    lcd_clear_pixel( LCD_COM_L4,  LCD_SEG_L05 );
-}
-
-
-void colonROn() {
-    lcd_set_pixel( LCD_COM_R4 ,  LCD_SEG_R05 );
-
-}
-
-void colonROff() {
-    lcd_clear_pixel( LCD_COM_R4,  LCD_SEG_R05 );
-}
-
-
-// decimal points between 2th and 3th digit on each module
-
-void decimalLOn() {
-    lcd_set_pixel( LCD_COM_L4 ,  LCD_SEG_L09 );
-}
-
-void decimalLOff() {
-    lcd_clear_pixel( LCD_COM_L4,  LCD_SEG_L09 );
-}
-
-
-void decimalROn() {
-    lcd_set_pixel( LCD_COM_R4 ,  LCD_SEG_R09 );
-
-}
-
-void decimalROff() {
-    lcd_clear_pixel( LCD_COM_R4,  LCD_SEG_R09 );
-}
-
-
-
-void spinOn( uint8_t d,  uint8_t step ) {
-
-    //LCD_MEM_REG( 3 , 19 ) |=  LCD_MEM_BIT( 3 , 19 );
-
-    //LCDDR0 |= LCD_MEM_BIT( digitmap[0][step].seg ,  digitmap[0][step].com );
-
-    lcd_set_pixel( digitmap[d][step].com ,  digitmap[d][step].seg );
-
-}
-
-void spinOff( uint8_t d,  uint8_t step ) {
-
-    lcd_clear_pixel( digitmap[d][step].com ,  digitmap[d][step].seg );
-
-}
-
-static const uint8_t figureEightSteps[] = {
-    SEG_A, SEG_B , SEG_G , SEG_E , SEG_D , SEG_C , SEG_G , SEG_F
-};
-
-void figure8On( uint8_t d,  uint8_t s ) {
-
-    uint8_t segementBit = figureEightSteps[s];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBit ) {
-
-            lcd_set_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-
-        }
-    }
-}
-
-
-void figure8Off( uint8_t d,  uint8_t s ) {
-
-    uint8_t segementBit = figureEightSteps[s];
-
-    for(uint8_t seg = 0 ; seg < 7; seg++ ) {    // Walk though the 7 segments A-G in the digit
-
-        if ( ( 1 << seg ) & segementBit ) {
-
-            lcd_clear_pixel( digitmap[d][seg].com ,  digitmap[d][seg].seg );
-        }
-    }
-}
-
-
-
-/*
- Bit 1 – SEGON: Segments “ON”.
- Writing this bit to one enables all segments and the contents of the Display Memory is output on the LCD. Writing it to
- zero, turns “OFF” all LCD segments.
- This bit can be used to flash the LCD, leaving the LCD timing generator enabled
-
- */
-
-void lcd_blank() {
-    LCD.CTRLA |= LCD_SEGON_bm;
-}
-
-void lcd_unblank() {
-    LCD.CTRLA &= ~LCD_SEGON_bm;
-}

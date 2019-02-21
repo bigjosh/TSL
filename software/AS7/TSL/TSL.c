@@ -20,6 +20,8 @@
 
 #include "USI_TWI_Master.h"
 
+#include "output.h"             // Include the call to the computer generated code that updates the LCD for an hour
+
 #define F_CPU 2000000		// Default internal RC clock on startup
 
 #define RX8900_TWI_ADDRESS 0b0110010        // RX8900 8.9.5 (datasheet page 29)
@@ -824,11 +826,18 @@ inline uint8_t diagnostic_in_EitherPin_Grounded() {
 // QUIRK: The RX8900 updates the time on the FALLING edge of FOUT.
 
 void FOUT_in_pin_enable() {
+    /*
     PORTB.PIN2CTRL = PORT_ISC_BOTHEDGES_gc;       // Interrupt on both the rising and falling edges of the 1Hz FOE signal from the RTC
                                                   // We will check these on waking and interlock to avoid spurious resets
+    */                                                  
+
+    PORTB.PIN2CTRL = PORT_ISC_FALLING_gc;       // Interrupt on both the rising and falling edges of the 1Hz FOE signal from the RTC
+    // We will check these on waking and interlock to avoid spurious resets
+
 
     PORTB.INTCTRL = PORT_INT0LVL0_bm;            // PORTB int0 is low level interrupt
-    PORTB_INT0MASK |= PIN2_bm;                   // Enable pin 7 to be int0
+    #warning
+    //PORTB_INT0MASK |= PIN2_bm;                   // Enable pin 7 to be int0
 }
 
 // Returns the current FOUT pin state
@@ -2337,79 +2346,6 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
 }
 
-// Count 0-9
-
-void emittedLcdCounter() {
-    
-    asm("nop");    
-    asm("ldi r18,0xc0":::"r18");  // Was 00
-    asm("sts 0x0d12,r18");
-    asm("ldi r18,0x40":::"r18");  // Was 00
-    asm("sts 0x0d16,r18");
-    asm("ldi r18,0xc0":::"r18");  // Was 00
-    asm("sts 0x0d1a,r18");
-    asm("ldi r18,0x80":::"r18");  // Was 00
-    asm("sts 0x0d1e,r18");
-    asm("sleep");  // Step 0
-    asm("ldi r18,0x80":::"r18");  // Was c0
-    asm("sts 0x0d12,r18");
-    asm("ldi r18,0x00":::"r18");  // Was 40
-    asm("sts 0x0d16,r18");
-    asm("ldi r18,0x80":::"r18");  // Was c0
-    asm("sts 0x0d1a,r18");
-    asm("ldi r18,0x00":::"r18");  // Was 80
-    asm("sts 0x0d1e,r18");
-    asm("sleep");  // Step 1
-    asm("ldi r18,0x40":::"r18");  // Was 80
-    asm("sts 0x0d12,r18");
-    asm("ldi r18,0xc0":::"r18");  // Was 00
-    asm("sts 0x0d16,r18");
-    asm("ldi r18,0x80":::"r18");  // Was 00
-    asm("sts 0x0d1e,r18");
-    asm("sleep");  // Step 2
-    asm("ldi r18,0xc0":::"r18");  // Was 40
-    asm("sts 0x0d12,r18");
-    asm("ldi r18,0x80":::"r18");  // Was c0
-    asm("sts 0x0d16,r18");
-    asm("sleep");  // Step 3
-    asm("ldi r18,0x80":::"r18");  // Was c0
-    asm("sts 0x0d12,r18");
-    asm("ldi r18,0xc0":::"r18");  // Was 80
-    asm("sts 0x0d1a,r18");
-    asm("ldi r18,0x00":::"r18");  // Was 80
-    asm("sts 0x0d1e,r18");
-    asm("sleep");  // Step 4
-    asm("ldi r18,0xc0":::"r18");  // Was 80
-    asm("sts 0x0d12,r18");
-    asm("ldi r18,0x40":::"r18");  // Was c0
-    asm("sts 0x0d1a,r18");
-    asm("ldi r18,0x80":::"r18");  // Was 00
-    asm("sts 0x0d1e,r18");
-    asm("sleep");  // Step 5
-    asm("ldi r18,0xc0":::"r18");  // Was 80
-    asm("sts 0x0d16,r18");
-    asm("sleep");  // Step 6
-    asm("ldi r18,0x80":::"r18");  // Was c0
-    asm("sts 0x0d12,r18");
-    asm("ldi r18,0x00":::"r18");  // Was c0
-    asm("sts 0x0d16,r18");
-    asm("ldi r18,0x80":::"r18");  // Was 40
-    asm("sts 0x0d1a,r18");
-    asm("sleep");  // Step 7
-    asm("ldi r18,0xc0":::"r18");  // Was 80
-    asm("sts 0x0d12,r18");
-    asm("ldi r18,0xc0":::"r18");  // Was 00
-    asm("sts 0x0d16,r18");
-    asm("ldi r18,0xc0":::"r18");  // Was 80
-    asm("sts 0x0d1a,r18");
-    asm("sleep");  // Step 8
-    asm("ldi r18,0x80":::"r18");  // Was c0
-    asm("sts 0x0d16,r18");
-    asm("sleep");  // Step 9
-        asm("nop");
-}
-
-
 
 void showPinBPhase1() {
 
@@ -2641,7 +2577,9 @@ int main(void)
         
         };  
     */
-    while (1) emittedLcdCounter();
+    
+    lcd_run_for_an_hour();    
+    
 
     if ( check_low_battery() ) {
 
