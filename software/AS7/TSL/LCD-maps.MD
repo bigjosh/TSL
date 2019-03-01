@@ -161,8 +161,14 @@ Indirect stores on the XMEGA with `ST` only take 1 cycle, but there are only a t
 
 Since we pre-compute the values that will go into the LCD registers, we can hard code these bytes into `LDI` instructions which only take 1 cycle. We also sort these in order of most used and pre-load the top few into XMEGA general purpose registers so we can even skip the `LDI` sometimes and directly store the general purpose register int the LCD register. In the best case where we are updating one of the top 3 LCD registers with one of the top vales and we only need to update 2 of the LCD registers, we can get away with just 2 indirect stores of 1 cycle each for a digit increment!  
 
+# If you ever need to update the code
 
- 
+You will need to...
 
-  
+1. Update any of the LCD pins or registers that changed in `lcd.c`.
+2. Copy/paste this new code between the cut lines into `CodeThatGeneratesCode.c`.
+3. Edit the section in `CodeThatGeneratesCode.c` that toggles on the `FOUT` pin to reflect any changes to this pin.
+4. Run the `CodeThatGeneratesCode.c` program and capture the output.
+5. Paste that output back into `generatedcode.c` between the cut marks. 
+
 

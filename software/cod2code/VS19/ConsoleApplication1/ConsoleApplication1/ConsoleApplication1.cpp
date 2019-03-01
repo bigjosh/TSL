@@ -1,18 +1,29 @@
 
-//---------------CUT HERE FOR SEG MAP PRINTOUT
+/*
 
-// The code between the cut points can be run to print a map of which
-// registers are used for which digits using printRegMap()
+	This program will genrate the source code that updates the TSL LCD. You should run this program on a 
+	computer (not on the TSL) and then capture the output, paste it into the output.c file in the TSL project,
+	and then recompile the TSL project. 
+
+	See code2code.MD for more info on how this all works. 
+
+*/
+
 
 // You will need these to make this block compile independently...
 #include <stdio.h>
 
 #ifndef uint8_t
-typedef unsigned char uint8_t;
+	typedef unsigned char uint8_t;
 #endif
 
 
-// Maximum number of common lines. Defined in datasheets.
+	//---------------CUT HERE FOR SEG MAP PRINTOUT
+	// This code should be copy/pasted from LCD.C to ConsoleApplication1.cpp any time
+	// it is changed and you want to regenerate the LCD updater code in output.c. 
+
+
+	// Maximum number of common lines. Defined in datasheets.
 #define LCD_MAX_NBR_OF_COM  4
 // Maximum number of segment lines. Defined in datasheets.
 #define LCD_MAX_NBR_OF_SEG  25
@@ -23,28 +34,28 @@ typedef unsigned char uint8_t;
 
 // Return the offset of the register that holds the requested pixel
 
-inline static uint8_t LCD_REG_OFF(uint8_t com, uint8_t seg) {
+	inline static uint8_t LCD_REG_OFF(uint8_t com, uint8_t seg) {
 
-	uint8_t reg = (com * ((LCD_MAX_NBR_OF_SEG + 7) / 8)) + (seg / 8);
+		uint8_t reg = (com * ((LCD_MAX_NBR_OF_SEG + 7) / 8)) + (seg / 8);
 
-	return reg;
-}
-
-
-// Return the bit in the register that holds the requested pixel
-
-inline static uint8_t LCD_REG_BIT(uint8_t com, uint8_t seg) {
-
-	return  seg % 8;
-
-}
+		return reg;
+	}
 
 
-// LCD FONT----
+	// Return the bit in the register that holds the requested pixel
 
-// Map 7 segments A-G to internal representation bits
-// A=0b00000001, B=0b00000010, etc
-// Just luck that 7 segments fits into an 8 bit byte
+	inline static uint8_t LCD_REG_BIT(uint8_t com, uint8_t seg) {
+
+		return  seg % 8;
+
+	}
+
+
+	// LCD FONT----
+
+	// Map 7 segments A-G to internal representation bits
+	// A=0b00000001, B=0b00000010, etc
+	// Just luck that 7 segments fits into an 8 bit byte
 
 #define LCD_SEG_BIT( letter ) ( 1 << (letter - 'A') )
 
@@ -72,48 +83,48 @@ inline static uint8_t LCD_REG_BIT(uint8_t com, uint8_t seg) {
 */
 
 
-const uint8_t lcd_font_digits[] = {
-	SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F ,         // 0
-	SEG_E | SEG_F ,                                         // 1
-	SEG_A | SEG_B | SEG_G | SEG_E | SEG_D ,                 // 2
-	SEG_A | SEG_F | SEG_G | SEG_E | SEG_D ,                 // 3
-	SEG_F | SEG_G | SEG_E | SEG_C ,                         // 4
-	SEG_A | SEG_F | SEG_G | SEG_C | SEG_D ,                 // 5
-	SEG_A | SEG_C | SEG_D | SEG_B | SEG_F | SEG_G ,         // 6
-	SEG_D | SEG_E | SEG_F ,                                 // 7
-	SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F | SEG_G , // 8
-	SEG_A | SEG_E | SEG_C | SEG_D | SEG_F | SEG_G ,         // 9
-};
+	const uint8_t lcd_font_digits[] = {
+		SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F ,         // 0
+		SEG_E | SEG_F ,                                         // 1
+		SEG_A | SEG_B | SEG_G | SEG_E | SEG_D ,                 // 2
+		SEG_A | SEG_F | SEG_G | SEG_E | SEG_D ,                 // 3
+		SEG_F | SEG_G | SEG_E | SEG_C ,                         // 4
+		SEG_A | SEG_F | SEG_G | SEG_C | SEG_D ,                 // 5
+		SEG_A | SEG_C | SEG_D | SEG_B | SEG_F | SEG_G ,         // 6
+		SEG_D | SEG_E | SEG_F ,                                 // 7
+		SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F | SEG_G , // 8
+		SEG_A | SEG_E | SEG_C | SEG_D | SEG_F | SEG_G ,         // 9
+	};
 
 
-const uint8_t lcd_font_char_dash = { SEG_G };                                 // '-'
-const uint8_t lcd_font_char_c = { SEG_G | SEG_B | SEG_A };                 // c
-const uint8_t lcd_font_char_L = { SEG_C | SEG_B | SEG_A };                 // L
-const uint8_t lcd_font_char_o = { SEG_G | SEG_B | SEG_A | SEG_F };         // o
-const uint8_t lcd_font_char_E = { SEG_D | SEG_C | SEG_G | SEG_B | SEG_A }; // E
-const uint8_t lcd_font_char_r = { SEG_B | SEG_G };                         // r
-const uint8_t lcd_font_char_P = { SEG_E | SEG_D | SEG_C | SEG_G | SEG_B }; // P
+	const uint8_t lcd_font_char_dash = { SEG_G };                                 // '-'
+	const uint8_t lcd_font_char_c = { SEG_G | SEG_B | SEG_A };                 // c
+	const uint8_t lcd_font_char_L = { SEG_C | SEG_B | SEG_A };                 // L
+	const uint8_t lcd_font_char_o = { SEG_G | SEG_B | SEG_A | SEG_F };         // o
+	const uint8_t lcd_font_char_E = { SEG_D | SEG_C | SEG_G | SEG_B | SEG_A }; // E
+	const uint8_t lcd_font_char_r = { SEG_B | SEG_G };                         // r
+	const uint8_t lcd_font_char_P = { SEG_E | SEG_D | SEG_C | SEG_G | SEG_B }; // P
 
-const uint8_t lcd_font_char_J = { SEG_B | SEG_A | SEG_F | SEG_F | SEG_E }; // J
-const uint8_t lcd_font_char_O = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F | SEG_E }; // O
-const uint8_t lcd_font_char_S = { SEG_D | SEG_C | SEG_G | SEG_F | SEG_A }; // S
-const uint8_t lcd_font_char_H = { SEG_B | SEG_C | SEG_F | SEG_G | SEG_E }; // H
+	const uint8_t lcd_font_char_J = { SEG_B | SEG_A | SEG_F | SEG_F | SEG_E }; // J
+	const uint8_t lcd_font_char_O = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F | SEG_E }; // O
+	const uint8_t lcd_font_char_S = { SEG_D | SEG_C | SEG_G | SEG_F | SEG_A }; // S
+	const uint8_t lcd_font_char_H = { SEG_B | SEG_C | SEG_F | SEG_G | SEG_E }; // H
 
-const uint8_t lcd_font_char_n = { SEG_B | SEG_G | SEG_F };                 // n
-const uint8_t lcd_font_char_t = { SEG_B | SEG_C | SEG_A | SEG_G };         // t
-const uint8_t lcd_font_char_i = { SEG_B };                                 // i
-const uint8_t lcd_font_char_G = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F }; // G
+	const uint8_t lcd_font_char_n = { SEG_B | SEG_G | SEG_F };                 // n
+	const uint8_t lcd_font_char_t = { SEG_B | SEG_C | SEG_A | SEG_G };         // t
+	const uint8_t lcd_font_char_i = { SEG_B };                                 // i
+	const uint8_t lcd_font_char_G = { SEG_D | SEG_C | SEG_B | SEG_A | SEG_F }; // G
 
-const uint8_t lcd_font_char_V = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_E }; // V (ok, not really)
-const uint8_t lcd_font_char_l = { SEG_C | SEG_B };                         // l
+	const uint8_t lcd_font_char_V = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_E }; // V (ok, not really)
+	const uint8_t lcd_font_char_l = { SEG_C | SEG_B };                         // l
 
-const uint8_t lcd_font_char_b = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_G }; // b
-const uint8_t lcd_font_char_A = { SEG_C | SEG_B | SEG_D | SEG_E | SEG_G | SEG_F };   // A
-const uint8_t lcd_font_char_d = { SEG_G | SEG_B | SEG_A | SEG_F | SEG_E };  // d
-const uint8_t lcd_font_char_U = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_E };  // d
+	const uint8_t lcd_font_char_b = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_G }; // b
+	const uint8_t lcd_font_char_A = { SEG_C | SEG_B | SEG_D | SEG_E | SEG_G | SEG_F };   // A
+	const uint8_t lcd_font_char_d = { SEG_G | SEG_B | SEG_A | SEG_F | SEG_E };  // d
+	const uint8_t lcd_font_char_U = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_E };  // d
 
 
-// Map LCD seg pins to MCU seg pins (set by PCB layout)
+	// Map LCD seg pins to MCU seg pins (set by PCB layout)
 
 #define LCD_SEG_R01 24
 #define LCD_SEG_R02 23
@@ -163,145 +174,147 @@ const uint8_t lcd_font_char_U = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_E };  // d
 
 // Map each of the 7 visible LCD icons A-G in each of the 6 digits per LCD
 
-typedef struct {
-	uint8_t com;
-	uint8_t seg;
-} lcd_visible_segment;
+	typedef struct {
+		uint8_t com;
+		uint8_t seg;
+	} lcd_visible_segment;
 
-// TODO: PROGMEM and then statically compiled transitions
+	// TODO: PROGMEM and then statically compiled transitions
 
-// Maps segments in each digit to corresponding SEG and COM pin
-// 0=rightmost digit, 11=leftmost
+	// Maps segments in each digit to corresponding SEG and COM pin
+	// 0=rightmost digit, 11=leftmost
 
-const lcd_visible_segment  digitmap[12][7] = {
+	const lcd_visible_segment  digitmap[12][7] = {
 
-	// Right LCD
+		// Right LCD
 
-	{     //1 on the datasheet= 0 in digitmap array
-		{LCD_COM_R1 , LCD_SEG_R03 },       //A
-		{LCD_COM_R2 , LCD_SEG_R03 },       //B
-		{LCD_COM_R3 , LCD_SEG_R03 },       //C
-		{LCD_COM_R4 , LCD_SEG_R02 },       //D
-		{LCD_COM_R3 , LCD_SEG_R02 },       //E
-		{LCD_COM_R1 , LCD_SEG_R02 },       //F
-		{LCD_COM_R2 , LCD_SEG_R02 },       //G
-	},
+		{     //1 on the datasheet= 0 in digitmap array
+			{LCD_COM_R1 , LCD_SEG_R03 },       //A
+			{LCD_COM_R2 , LCD_SEG_R03 },       //B
+			{LCD_COM_R3 , LCD_SEG_R03 },       //C
+			{LCD_COM_R4 , LCD_SEG_R02 },       //D
+			{LCD_COM_R3 , LCD_SEG_R02 },       //E
+			{LCD_COM_R1 , LCD_SEG_R02 },       //F
+			{LCD_COM_R2 , LCD_SEG_R02 },       //G
+		},
 
-	{     //2
-		{LCD_COM_R1 , LCD_SEG_R05 },       //A
-		{LCD_COM_R2 , LCD_SEG_R05 },       //B
-		{LCD_COM_R3 , LCD_SEG_R05 },       //C
-		{LCD_COM_R4 , LCD_SEG_R04 },       //D
-		{LCD_COM_R3 , LCD_SEG_R04 },       //E
-		{LCD_COM_R1 , LCD_SEG_R04 },       //F
-		{LCD_COM_R2 , LCD_SEG_R04 },       //G
-	},
+		{     //2
+			{LCD_COM_R1 , LCD_SEG_R05 },       //A
+			{LCD_COM_R2 , LCD_SEG_R05 },       //B
+			{LCD_COM_R3 , LCD_SEG_R05 },       //C
+			{LCD_COM_R4 , LCD_SEG_R04 },       //D
+			{LCD_COM_R3 , LCD_SEG_R04 },       //E
+			{LCD_COM_R1 , LCD_SEG_R04 },       //F
+			{LCD_COM_R2 , LCD_SEG_R04 },       //G
+		},
 
-	{     //3
-		{LCD_COM_R1 , LCD_SEG_R07 },       //A
-		{LCD_COM_R2 , LCD_SEG_R07 },       //B
-		{LCD_COM_R3 , LCD_SEG_R07 },       //C
-		{LCD_COM_R4 , LCD_SEG_R06 },       //D
-		{LCD_COM_R3 , LCD_SEG_R06 },       //E
-		{LCD_COM_R1 , LCD_SEG_R06 },       //F
-		{LCD_COM_R2 , LCD_SEG_R06 },       //G
-	},
+		{     //3
+			{LCD_COM_R1 , LCD_SEG_R07 },       //A
+			{LCD_COM_R2 , LCD_SEG_R07 },       //B
+			{LCD_COM_R3 , LCD_SEG_R07 },       //C
+			{LCD_COM_R4 , LCD_SEG_R06 },       //D
+			{LCD_COM_R3 , LCD_SEG_R06 },       //E
+			{LCD_COM_R1 , LCD_SEG_R06 },       //F
+			{LCD_COM_R2 , LCD_SEG_R06 },       //G
+		},
 
-	{     //4
-		{LCD_COM_R1 , LCD_SEG_R09 },       //A
-		{LCD_COM_R2 , LCD_SEG_R09 },       //B
-		{LCD_COM_R3 , LCD_SEG_R09 },       //C
-		{LCD_COM_R4 , LCD_SEG_R08 },       //D
-		{LCD_COM_R3 , LCD_SEG_R08 },       //E
-		{LCD_COM_R1 , LCD_SEG_R08 },       //F
-		{LCD_COM_R2 , LCD_SEG_R08 },       //G
-	},
+		{     //4
+			{LCD_COM_R1 , LCD_SEG_R09 },       //A
+			{LCD_COM_R2 , LCD_SEG_R09 },       //B
+			{LCD_COM_R3 , LCD_SEG_R09 },       //C
+			{LCD_COM_R4 , LCD_SEG_R08 },       //D
+			{LCD_COM_R3 , LCD_SEG_R08 },       //E
+			{LCD_COM_R1 , LCD_SEG_R08 },       //F
+			{LCD_COM_R2 , LCD_SEG_R08 },       //G
+		},
 
-	{     //5
-		{LCD_COM_R1 , LCD_SEG_R11 },       //A
-		{LCD_COM_R2 , LCD_SEG_R11 },       //B
-		{LCD_COM_R3 , LCD_SEG_R11 },       //C
-		{LCD_COM_R4 , LCD_SEG_R10 },       //D
-		{LCD_COM_R3 , LCD_SEG_R10 },       //E
-		{LCD_COM_R1 , LCD_SEG_R10 },       //F
-		{LCD_COM_R2 , LCD_SEG_R10 },       //G
-	},
+		{     //5
+			{LCD_COM_R1 , LCD_SEG_R11 },       //A
+			{LCD_COM_R2 , LCD_SEG_R11 },       //B
+			{LCD_COM_R3 , LCD_SEG_R11 },       //C
+			{LCD_COM_R4 , LCD_SEG_R10 },       //D
+			{LCD_COM_R3 , LCD_SEG_R10 },       //E
+			{LCD_COM_R1 , LCD_SEG_R10 },       //F
+			{LCD_COM_R2 , LCD_SEG_R10 },       //G
+		},
 
-	{     //6
-		{LCD_COM_R1 , LCD_SEG_R13 },       //A
-		{LCD_COM_R2 , LCD_SEG_R13 },       //B
-		{LCD_COM_R3 , LCD_SEG_R13 },       //C
-		{LCD_COM_R4 , LCD_SEG_R12 },       //D
-		{LCD_COM_R3 , LCD_SEG_R12 },       //E
-		{LCD_COM_R1 , LCD_SEG_R12 },       //F
-		{LCD_COM_R2 , LCD_SEG_R12 },       //G
-	},
+		{     //6
+			{LCD_COM_R1 , LCD_SEG_R13 },       //A
+			{LCD_COM_R2 , LCD_SEG_R13 },       //B
+			{LCD_COM_R3 , LCD_SEG_R13 },       //C
+			{LCD_COM_R4 , LCD_SEG_R12 },       //D
+			{LCD_COM_R3 , LCD_SEG_R12 },       //E
+			{LCD_COM_R1 , LCD_SEG_R12 },       //F
+			{LCD_COM_R2 , LCD_SEG_R12 },       //G
+		},
 
-	// Left LCD
+		// Left LCD
 
-	{     //1 on the datasheet= 0 in digitmap array
-		{LCD_COM_L1 , LCD_SEG_L03 },       //A
-		{LCD_COM_L2 , LCD_SEG_L03 },       //B
-		{LCD_COM_L3 , LCD_SEG_L03 },       //C
-		{LCD_COM_L4 , LCD_SEG_L02 },       //D
-		{LCD_COM_L3 , LCD_SEG_L02 },       //E
-		{LCD_COM_L1 , LCD_SEG_L02 },       //F
-		{LCD_COM_L2 , LCD_SEG_L02 },       //G
-	},
+		{     //1 on the datasheet= 0 in digitmap array
+			{LCD_COM_L1 , LCD_SEG_L03 },       //A
+			{LCD_COM_L2 , LCD_SEG_L03 },       //B
+			{LCD_COM_L3 , LCD_SEG_L03 },       //C
+			{LCD_COM_L4 , LCD_SEG_L02 },       //D
+			{LCD_COM_L3 , LCD_SEG_L02 },       //E
+			{LCD_COM_L1 , LCD_SEG_L02 },       //F
+			{LCD_COM_L2 , LCD_SEG_L02 },       //G
+		},
 
-	{     //2
-		{LCD_COM_L1 , LCD_SEG_L05 },       //A
-		{LCD_COM_L2 , LCD_SEG_L05 },       //B
-		{LCD_COM_L3 , LCD_SEG_L05 },       //C
-		{LCD_COM_L4 , LCD_SEG_L04 },       //D
-		{LCD_COM_L3 , LCD_SEG_L04 },       //E
-		{LCD_COM_L1 , LCD_SEG_L04 },       //F
-		{LCD_COM_L2 , LCD_SEG_L04 },       //G
-	},
+		{     //2
+			{LCD_COM_L1 , LCD_SEG_L05 },       //A
+			{LCD_COM_L2 , LCD_SEG_L05 },       //B
+			{LCD_COM_L3 , LCD_SEG_L05 },       //C
+			{LCD_COM_L4 , LCD_SEG_L04 },       //D
+			{LCD_COM_L3 , LCD_SEG_L04 },       //E
+			{LCD_COM_L1 , LCD_SEG_L04 },       //F
+			{LCD_COM_L2 , LCD_SEG_L04 },       //G
+		},
 
-	{     //3
-		{LCD_COM_L1 , LCD_SEG_L07 },       //A
-		{LCD_COM_L2 , LCD_SEG_L07 },       //B
-		{LCD_COM_L3 , LCD_SEG_L07 },       //C
-		{LCD_COM_L4 , LCD_SEG_L06 },       //D
-		{LCD_COM_L3 , LCD_SEG_L06 },       //E
-		{LCD_COM_L1 , LCD_SEG_L06 },       //F
-		{LCD_COM_L2 , LCD_SEG_L06 },       //G
-	},
+		{     //3
+			{LCD_COM_L1 , LCD_SEG_L07 },       //A
+			{LCD_COM_L2 , LCD_SEG_L07 },       //B
+			{LCD_COM_L3 , LCD_SEG_L07 },       //C
+			{LCD_COM_L4 , LCD_SEG_L06 },       //D
+			{LCD_COM_L3 , LCD_SEG_L06 },       //E
+			{LCD_COM_L1 , LCD_SEG_L06 },       //F
+			{LCD_COM_L2 , LCD_SEG_L06 },       //G
+		},
 
-	{     //4
-		{LCD_COM_L1 , LCD_SEG_L09 },       //A
-		{LCD_COM_L2 , LCD_SEG_L09 },       //B
-		{LCD_COM_L3 , LCD_SEG_L09 },       //C
-		{LCD_COM_L4 , LCD_SEG_L08 },       //D
-		{LCD_COM_L3 , LCD_SEG_L08 },       //E
-		{LCD_COM_L1 , LCD_SEG_L08 },       //F
-		{LCD_COM_L2 , LCD_SEG_L08 },       //G
-	},
+		{     //4
+			{LCD_COM_L1 , LCD_SEG_L09 },       //A
+			{LCD_COM_L2 , LCD_SEG_L09 },       //B
+			{LCD_COM_L3 , LCD_SEG_L09 },       //C
+			{LCD_COM_L4 , LCD_SEG_L08 },       //D
+			{LCD_COM_L3 , LCD_SEG_L08 },       //E
+			{LCD_COM_L1 , LCD_SEG_L08 },       //F
+			{LCD_COM_L2 , LCD_SEG_L08 },       //G
+		},
 
-	{     //5
-		{LCD_COM_L1 , LCD_SEG_L11 },       //A
-		{LCD_COM_L2 , LCD_SEG_L11 },       //B
-		{LCD_COM_L3 , LCD_SEG_L11 },       //C
-		{LCD_COM_L4 , LCD_SEG_L10 },       //D
-		{LCD_COM_L3 , LCD_SEG_L10 },       //E
-		{LCD_COM_L1 , LCD_SEG_L10 },       //F
-		{LCD_COM_L2 , LCD_SEG_L10 },       //G
-	},
+		{     //5
+			{LCD_COM_L1 , LCD_SEG_L11 },       //A
+			{LCD_COM_L2 , LCD_SEG_L11 },       //B
+			{LCD_COM_L3 , LCD_SEG_L11 },       //C
+			{LCD_COM_L4 , LCD_SEG_L10 },       //D
+			{LCD_COM_L3 , LCD_SEG_L10 },       //E
+			{LCD_COM_L1 , LCD_SEG_L10 },       //F
+			{LCD_COM_L2 , LCD_SEG_L10 },       //G
+		},
 
-	{     //6
-		{LCD_COM_L1 , LCD_SEG_L13 },       //A
-		{LCD_COM_L2 , LCD_SEG_L13 },       //B
-		{LCD_COM_L3 , LCD_SEG_L13 },       //C
-		{LCD_COM_L4 , LCD_SEG_L12 },       //D
-		{LCD_COM_L3 , LCD_SEG_L12 },       //E
-		{LCD_COM_L1 , LCD_SEG_L12 },       //F
-		{LCD_COM_L2 , LCD_SEG_L12 },       //G
-	},
+		{     //6
+			{LCD_COM_L1 , LCD_SEG_L13 },       //A
+			{LCD_COM_L2 , LCD_SEG_L13 },       //B
+			{LCD_COM_L3 , LCD_SEG_L13 },       //C
+			{LCD_COM_L4 , LCD_SEG_L12 },       //D
+			{LCD_COM_L3 , LCD_SEG_L12 },       //E
+			{LCD_COM_L1 , LCD_SEG_L12 },       //F
+			{LCD_COM_L2 , LCD_SEG_L12 },       //G
+		},
 
 
 
-};
+	};
+
+//---------------- END CUT
 
 #include <stdio.h>
 
@@ -520,8 +533,6 @@ class Top_finder {
 		set<key_value_pair, cmp_value> sorted_keys;
 
 		for (auto const& pair : keys_values_map) {
-
-			printf("insert %2.2d\n", pair.first);
 
 			sorted_keys.insert(pair);
 
@@ -757,8 +768,7 @@ void lcdEmit1hourCode() {
 
 
 
-void main() {
+int main() {
 	lcdEmit1hourCode();
+	return 0;
 }
-
-//---------------- END CUT
