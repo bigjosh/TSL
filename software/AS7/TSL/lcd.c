@@ -21,6 +21,11 @@
 // Maximum number of segment lines. Defined in datasheets.
 #define LCD_MAX_NBR_OF_SEG  25
 
+// Use these for addressing the LCD pixel registers
+#define LCD_REGS_BASE_HIGH	(0x0D)		// High byte of the LCD registers base address
+#define LCD_REGS_BASE_LOW	(0x10)		// Low byte of the LCD registers base address
+
+
 // Map LCD segments to registers
 // compute at compile time
 // Taken from 25.5.11 DATA – LCD Data Memory Mapping

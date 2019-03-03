@@ -11,7 +11,4 @@
 
 void lcd_run_for_an_hour();
 
-
-
-
 #endif /* OUTPUT_H_ */

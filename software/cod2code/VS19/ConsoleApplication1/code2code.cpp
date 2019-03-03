@@ -30,7 +30,7 @@
 
 
 // Use these for addressing the LCD pixel registers
-#define LCD_REGS_BASE_HIGH	(0xD0)		// High byte of the LCD registers base address
+#define LCD_REGS_BASE_HIGH	(0x0D)		// High byte of the LCD registers base address
 #define LCD_REGS_BASE_LOW	(0x10)		// Low byte of the LCD registers base address
 
 
@@ -625,7 +625,42 @@ struct Top_finder {
 
 };
 
+const int string_bufer_len = 80;
+typedef char string_buffer[string_bufer_len];
 
+void printasm(const char* s, const char * clobbers , const char *comment) {
+
+	string_buffer clobbers_string;
+	string_buffer comment_string;
+
+	if (clobbers && *clobbers) {
+		sprintf_s(clobbers_string, string_bufer_len, "\"%s\"", clobbers);
+	}
+	else {
+		sprintf_s(clobbers_string, string_bufer_len, "     " );		// empty (5 spaces balance the quotes and 3 letter register name so everythign lines up nice)
+	}
+
+	if (comment && *comment ) {
+		sprintf_s(comment_string, string_bufer_len, "    // %s", comment);
+	}
+	else {
+		sprintf_s(comment_string, string_bufer_len, "");		// empty
+	}
+
+	printf("    asm(\"%-20s\":::%s);%s\n",  s , clobbers_string , comment_string );
+
+}
+
+
+void printcomment(const char* comment) {
+
+	printf("    // %s\n", comment);
+
+}
+
+void printblankline() {
+	printf("\n");
+}
 
 // Just to have a zeroed out one to copy
 
@@ -705,31 +740,29 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	for (auto const& reg : sorted_lcd_values) {
 
-		printf("//    Value: %3d Count: %3d\n", reg.key, reg.count);
+		printf("//    Value: %02x Count: %3d\n", reg.key, reg.count);
 
 	}
 
 	cout << "" << endl;
 
+	cout << "// Step though a full hour of LCD updates (3600 in all)\n\n";
 
-	cout << "// step though a full hour of LCD updates (3600 in all)" << endl;
-
-
-	cout << "void runlcdsequence() {" << endl;
+	cout << "void lcd_run_for_an_hour() {" << endl;
 
 	cout << "" << endl;
-	cout << "    // First we will load up the indirect pointers to point to the top 3 registers" << endl;
-	cout << "    // so we can get to those in 1 cycle rather than 3 cycles for an STS store to address." << endl;
-
 
 	// Remeber the ASM string will will output to store a AVR register to this LCD register
 	// This output string must have a %d in it it that will accept the XMEGA register number
 
-	const int max_reg_access_string_len = 20;
 
-	typedef char reg_access_string[max_reg_access_string_len];
 
-	reg_access_string reg_access_strings[LCD_REG_COUNT];
+	printcomment("First we will load up the indirect pointers to point to the top 3 LCD addresses");
+	printcomment("so we can get to those in 1 cycle with ST rather than 2 cycles for an STS");
+
+	string_buffer reg_access_asm_strings[LCD_REG_COUNT];
+	string_buffer reg_access_comment_strings[LCD_REG_COUNT];
+	int reg_access_cyclecount[LCD_REG_COUNT];					// Keep track of how many cycles this instruction takes for metrics
 
 	bool x_alocated_flag = false;
 	bool y_alocated_flag = false;
@@ -740,42 +773,110 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		if (!x_alocated_flag) {
 
-			//printf("    asm(\"ldi XH,0x%2.02x\":::\"XH\");  // Point top of X index to LCD register $02x\n", LCD_REGS_BASE_HIGH, reg.key);
-			//printf("    asm(\"ldi XL,0x%2.02x\":::\"XL\");  // Point bot of X index to LCD register $02x\n", LCD_REGS_BASE_LOW, reg.key);
+			string_buffer asm_buffer;
+			string_buffer comment_buffer;
 
-			sprintf_s( reg_access_strings[reg.key] , max_reg_access_string_len, "ST X,R%%02d" );		// Store to index reg X location
+			sprintf_s( asm_buffer , string_bufer_len, "LDI XH,0x%2.02x" , LCD_REGS_BASE_HIGH );		// Store to index reg X the location of the LCD register
+			sprintf_s( comment_buffer, string_bufer_len, "Store high byte of address of LCD reg %02d to X", reg.key);		// Store to index reg Z the location of the LCD register
+			printasm(asm_buffer, "r27", comment_buffer);	// Apparently clobbers filed doesnt know about *H register name
 
-			x_alocated_flag = true;
 
-		}
-		else if (!z_alocated_flag) {
+			sprintf_s(asm_buffer, string_bufer_len, "LDI XL,0x%2.02x", LCD_REGS_BASE_LOW + reg.key );		// Store to index reg X the location of the LCD register
+			sprintf_s(comment_buffer, string_bufer_len, "Store low byte of address of LCD reg %02d to X", reg.key);		// Store to index reg X the location of the LCD register
+			printasm(asm_buffer, "r26", comment_buffer); // Apparently clobbers filed doesnt know about *L register name
 
-			//printf("    asm(\"ldi ZH,0x%2.02x\":::\"ZH\");  // Point top of Z index to LCD register $02x\n", LCD_REGS_BASE_HIGH, reg.key);
-			//printf("    asm(\"ldi ZL,0x%2.02x\":::\"ZL\");  // Point bot of Z index to LCD register $02x\n", LCD_REGS_BASE_LOW, reg.key);
 
-			sprintf_s( reg_access_strings[reg.key] ,  max_reg_access_string_len, "ST Z,R%%02d");		// Store to index reg Z location
-
+			sprintf_s( reg_access_asm_strings[reg.key] , string_bufer_len, "ST X,r%%02d" );		// Store to index reg X location
+			sprintf_s( reg_access_comment_strings[reg.key], string_bufer_len, "%d accesses to R%02d" , reg.count , reg.key );		// Store to index reg X location
+			reg_access_cyclecount[reg.key] = 1; // ST only 1 cycle!
 			x_alocated_flag = true;
 
 		}
 		else {
 					
-			sprintf_s( reg_access_strings[reg.key] ,  max_reg_access_string_len, "   asm(\"STS 0x%04X,R%%02d\");" , reg.key + (LCD_REGS_BASE_HIGH<<8) + LCD_REGS_BASE_LOW);		// // All other registers have to use lowly direct store (2 cycles)
+			sprintf_s( reg_access_asm_strings[reg.key] ,  string_bufer_len, "STS 0x%04X,r%%02d" , (LCD_REGS_BASE_HIGH<<8) + LCD_REGS_BASE_LOW + reg.key );		// // All other registers have to use lowly direct store (2 cycles)
+			sprintf_s( reg_access_comment_strings[reg.key], string_bufer_len, "direct store to LCD register %02d", reg.key);		// Store to index reg X location
+			reg_access_cyclecount[reg.key] = 2; // STS 2 cycles on XMEGA
 
 		}
 
 	}
 
 
+	printcomment("Next we will load up the some available XMEGA registers with the most commonly");
+	printcomment("stored values so we can save an LDI to load them again.");
+
+	/*
+	struct avr_reg_type {
+
+		bool available;		// Can we use this reg?
+		bool callsaved;		// do we need to save it? 
+
+	};
+
+	const avr_reg_type avr_regs[32] = {
+
+		{false , false},				// 0 = temp_reg. We will use this for values that are not cached
+		{false , false},				// 1 = zero_reg. This comes preloaded. We will use this for 0. 
+
+		{true  , true },				// r2-r17 "Call-used registers. Assembler subroutines are responsible for saving and restoring these registers, if changed."
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+		{true  , true },
+
+		{true  , false},				// r18-r25 "You may use them freely in assembler subroutines."
+		{true  , false},
+		{true  , false},
+		{true  , false},
+		{true  , false},
+		{true  , false},
+		{true  , false},
+		{true  , false},
+
+		{false  , false},				// r26-r27. This is the X index. We will use it for addressing. Need not be saved.
+		{false  , false},
+
+		{false  , true },				// r28-r29. This is the Y index. We will use it for addressing. It is call saved (used for stack frame)
+		{false  , true },
+
+		{false  , false},				// r30-r31. This is the Z index. We will use it for addressing. Need not be saved.
+		{false  , false},
+
+	};
+
+	*/
+
+
 	// Reset back to start
 	regs_now = initial_lcd_reg_state;
 
+	// USed for building emmited strings
+	string_buffer asm_buffer;
+	string_buffer comment_buffer;
+
+	int total_cycle_count = 0;		// Keep track of total cycles to run though the sequence (assming no blocks or banches)
 
 	sequence_count = 10;
 
 	for (int i = 0; i < sequence_count; i++) {
 
-		printf("    // ---- Step %d\n", i);
+		int step_cycle_count = 0;		// How many cycles in this step? 
+
+		printblankline();
+		sprintf_s(comment_buffer, string_bufer_len, "---- Step %4d (%02d:%02d)", i , i/60 , i%60 );
+		printcomment(comment_buffer);
 
 		lcd_reg_state regs_next = sequence_of_lcd_reg_states[i];
 
@@ -785,8 +886,29 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 				// Note: we use R18 becuase it is not expected to be saved across calls and LDI needs a register higher than r16 so we can't use temp_reg
 
-				printf("    asm(\"ldi r18,0x%2.02x\":::\"r18\");  // Was %2.2x\n", regs_next.regs[r], regs_now.regs[r]);
-				printf( reg_access_strings[r] , 18 );            
+				int source_reg;
+
+				if (regs_next.regs[r] == 0x00) {
+
+					// Easy case - we need to store a zero so use the zero reg with is in R01
+					// Note that we do not have to load it, it is always zero
+
+					source_reg = 1;
+
+				} 
+
+
+				sprintf_s( asm_buffer , string_bufer_len , "LDI r18,0x%2.02x" , regs_next.regs[r] );
+				sprintf_s( comment_buffer, string_bufer_len, "Was %2.2x", regs_now.regs[r]);
+
+				step_cycle_count += 1;		// LDI = 1 cycle
+
+				printasm(asm_buffer, "r18", comment_buffer);	// Apparently clobber field only likes lower case
+
+				sprintf_s(asm_buffer, string_bufer_len, reg_access_asm_strings[r], 18 );
+				printasm(asm_buffer, "", reg_access_comment_strings[r] );
+
+				step_cycle_count += reg_access_cyclecount[r];		// Count how ever many cycles this store took
 
 				regs_now.regs[r] = regs_next.regs[r];
 
@@ -794,11 +916,20 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		}
 
-		printf("    asm(\"sleep\");  // Wait for interrupt from TX8900\n");
+		sprintf_s(comment_buffer, string_bufer_len, "--- Cycles in this step: %d", step_cycle_count);
+
+		printcomment(comment_buffer);
+		total_cycle_count += step_cycle_count;
+
+
+		printasm("SLEEP", "", "Wait for interrupt from TX8900");
+
+		/*
+		printf("    asm(\"sleep\");  //\n");
 		printf("    asm(\"sleep\");  // while (!PORTB.IN & _BV(2))\n");
 		printf("    asm(\"sleep\");  \n");
 		printf("    asm(\"sleep\");  // while (PORTB.IN & _BV(2))\n");
-
+		*/
 
 	}
 

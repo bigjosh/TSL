@@ -2,12 +2,11 @@
 
 To save power, we want to spend as much time sleeping as possible. When we wake up, we need to update the LCD display as quickly as possible and then go back to sleep.
 
-To this end, we want to find the optimal set of instruction to update the LCD display from the current value to the next one in as few cycles as possible.
+To this end, we want to find the optimal set of instructions to update the LCD display from the current value to the next one in as few cycles as possible.
 
-The LCD display segments are represented as bits in the XMEGA LCD registers. Because the LCD module is multiplex, these bits are not contiguous across registers. The bits for the segments in each digit are spread across as many as 4 registers (one for each of the common pins). 
+The LCD display segments are represented as bits in the XMEGA LCD registers. Because the LCD module is multiplexed, these bits are not contiguous across registers. The bits for the segments in each digit are spread across as many as 4 registers (one for each of the common pins). 
 
-Luckily the registers ended up organized so that each ground of 4 registers controls a contiguous block of four digits. Here is a map of which registers hold segments for each of the 12 digits...  
- 
+Luckily the registers ended up organized so that each group of 4 registers controls a contiguous block of four digits. Here is a map of which registers hold segments for each of the 12 digits...  
 
 ### LCD register usage by digit map
 
@@ -33,15 +32,15 @@ Luckily the registers ended up organized so that each ground of 4 registers cont
 
 Notice how digits 00-03 all use the same set of registers (02, 06, 10, and 14)?
 
-This means that as long as we know the current value for the first 4 digits, we can blindly write to these registers without having to first load them.
+This means that as long as we know the full current value for the first 4 digits, we can blindly write to these registers without having to load them, adjust the bits, and rewrite them.
 
 With all this in mind, we now know that we can represent an hour of updates (0000-5959 in the rightmost 4 digits) with a sequence of blind writes to registers 02 ,06, 10, and 14! 
 
 This is a total of 3600 updates to these registers, but the updates are not just increments or bit shifts because the bits represent the 7 physical visible segments on the LCDs. For example, to show a `0` we have to light 6 segments, but to show a `1` we only have to light 2 segments. See?
 
-So we have to map the LCD font into the bits of the registers. The fastest way to do this is to precompute to 4 registers for each of the 3600 steps. 
+So we have to map the LCD font into the bits of the registers. The fastest way to do this is to precompute the needed values for each of the 4 registers for each of the 3600 steps. 
 
-We could store all of these precomputed values in an array in flash and then load them in a loop, but loading data  from flash cost cycles as does the overhead of loops. Since we have plenty of flash memory available, we instead will just explicit hardcode each step into the sequence of instructions. The pseudocode looks like...
+We could store all of these precomputed values in an array in flash and then load them in a loop, but loading data  from flash costs cycles as does the overhead of loops. Since we have plenty of flash memory available, we instead will just explicitly hardcode each step into the sequence of instructions. The pseudocode looks like...
 
     1. Update register 02 with value that reflects LCD display of 0000.
     2. Update register 06 with value that reflects LCD display of 0000.
@@ -61,11 +60,8 @@ We could store all of these precomputed values in an array in flash and then loa
     etc...
     
 At first you might say "Why not only update the single register for the digit that changed?" But remember that the bits for each digit are scattered across the 4 registers. 
-
-
-   
+  
 Here is a map of how that happens to land....
-
          
 ## Segment map of each digit 
 
@@ -77,7 +73,6 @@ Here is a map of how that happens to land....
 
 (NOTE: LCD modules are mounted upside down for maximum contrast when viewed from 30 deg above)
     
-
 ## Map of segments to (register:bit)
 
 | Digit | A | B | C | D | E | F |
@@ -97,7 +92,7 @@ Here is a map of how that happens to land....
 
 ## Skipping redundant updates
 
-We can, however, skip updating a register if it happens that none of the bits in that register changed between steps. This happens quite frequently, but it is not obvious when it will happen unless you memorize which segments map to with registers. It is just luck when the next digit happens to not change any segments in a given register. Here is a map of the changes to segments when the digit is incremented...   
+We can, however, skip updating a register if it happens that none of the bits in that register changed between steps. This happens quite frequently, but it is not obvious when it will happen unless you memorize which segments map to which registers. It is just luck when the next digit happens to not change any segments in a given register. Here is a map of the changes to segments when the digit is incremented...   
 
 ## LCD changes by digit (`X`=changed)
 
@@ -147,28 +142,76 @@ Note that we always want to to all 4 registers when executing step `0000` just s
 
 # Code that makes code
 
-Calculating the correct values of each of the 4 registers for each of the 3600 steps - and then deleing the redundant ones - would be a lot of fiddling and typing.
+Calculating the correct values of each of the 4 registers for each of the 3600 steps - and then deleting the redundant ones - would be a lot of fiddling and typing.
 
-So instead we will use some code.... to write our code. This is much simpler than it sounds. We will just write a very simple C program that does the computations above and uses normal `printf()`s to print out the lines of code that do the updates. We can then run our program, capture its output, and then paste this output into the program that will run on the TSL.
+So instead we will use some code.... to write our code. This is much simpler than it sounds. We will just write a very simple C++ program that does the computations above and uses normal `printf()`s to print out the lines of code that do the updates. We can then run our program, capture its output, and then paste this output into the program that will run on the TSL.
 
-As a practical matter, this code that writes code needs to know all about the LCD layout and the register locations and such, so it is just easier to keep it inside the normal TSL LCD source file. It is between the comments that say "Cut here". Note that this program that writes the program is commented out in the TSL project - we need to run it on a real computer with `printf()` to get the output. I used Visual Studio, but you can use `gcc` or whatever you want if you ever changes things and need to regenerate the code written by the code.   
+Note that this program does not run on the TSL itself, it runs on a real computer with `printf()`. You have to capture this output (which is source code text) and then manually copy this new source code back into the TSL project. 
 
+This code lives in `software/code2code`. It is currently set up as a Visual Studio project, but you can just as easily compile and run the single `code2code.cpp` source file with GCC. 
+
+## Cutting and pasting
+
+This code that writes code needs to know all about the LCD layout and the register locations and such. I could have made  a fancy system to share all this info between the TSL project and the code2code project and had make files automatically keep them up to date, but since you only have to update `code2code` when some hardware parameter changes in the TSL project (and because I am lazy),  instead now you have to do it manually. Here are the steps...
+
+1. Update the `LCD.c` source with new values.
+2. Cut and paste the code between the `cut here` marks from `LCD.c` to `code2code.cpp`.
+3. Compile and run the new `code2code` code and capture the output into `output.c`.
+4. Copy/paste this new `output.c` to the TSL project, covering over the  one.
+5. Rebuild the `TSL` project.
+ 
 # The actual code
 
 So what is the best way to actually implement the pseduo code above on our XMEGA?
 
-Indirect stores on the XMEGA with `ST` only take 1 cycle, but there are only a total of 3 indirect pointers. We need 4 registers to generally update any digit (or set of 4 contiguous digits). So we pick the 3 LCD registers that are updated most often and we initialize the 3 indirect pointers to point to those. For the 4th (least used) register, we bite the bullet and do an `STS` directly to the address which costs 2 cycles.
+## Indirect stores save a cycle
 
-Since we pre-compute the values that will go into the LCD registers, we can hard code these bytes into `LDI` instructions which only take 1 cycle. We also sort these in order of most used and pre-load the top few into XMEGA general purpose registers so we can even skip the `LDI` sometimes and directly store the general purpose register int the LCD register. In the best case where we are updating one of the top 3 LCD registers with one of the top vales and we only need to update 2 of the LCD registers, we can get away with just 2 indirect stores of 1 cycle each for a digit increment!  
+Indirect stores on the XMEGA with `ST` only take 1 cycle, but there are only a total of 3 indirect pointers (X,Y,Z). We need 4 registers to generally update any digit (or set of 4 contiguous digits). So we pick the 3 LCD registers that are updated most often and we initialize the 3 indirect pointers to point to those. For the 4th (least used) register, we bite the bullet and do an `STS` directly to the address which costs 2 cycles.
 
-# If you ever need to update the code
+The LCD registers are listed in order of popularity in a comment at the top of the output.c file for reference. Here are the current values...
 
-You will need to...
+    // Most accessed LCD registers:
+    //    REG:  6 Count: 2880
+    //    REG:  2 Count: 2868
+    //    REG: 10 Count: 2040
+    //    REG: 14 Count: 1709 
+    
+The index registers are loaded with the addresses of the top 3 LCD registers at the very top of the `emit_code_for_lcd_steps()` function. Note that we must `PUSH` register `Y` and then pop it again before returning since it is guaranteed to be [saved across function calls](https://www.microchip.com/webdoc/AVRLibcReferenceManual/FAQ_1faq_reg_usage.html). Note that `Y` is stored in `R28` & `R29`. Luckily these pushes and pops only cost 1 cycle each, so a total of 4 cycles to save about 2040 cycles over the course of the 3600 updates.
 
-1. Update any of the LCD pins or registers that changed in `lcd.c`.
-2. Copy/paste this new code between the cut lines into `CodeThatGeneratesCode.c`.
-3. Edit the section in `CodeThatGeneratesCode.c` that toggles on the `FOUT` pin to reflect any changes to this pin.
-4. Run the `CodeThatGeneratesCode.c` program and capture the output.
-5. Paste that output back into `generatedcode.c` between the cut marks. 
+Note that X, Y, and Z registers are actually pairs of XMEGA registers r27:r26, r29:r28 and r31:r30. Some instructions use the letters (`ST X`) and others use the numbers (`LDI R27`).  
+  
+
+## Stashing the values that get stored into the LCD registers
+
+Both the indirect `ST` and the direct `STS` store instructions store a value that is already loaded into one of the XMEGA registers. 
+
+The fastest way to load a precomputed value into an XMEGA register is using the `LDI` instruction, which takes 1 cycle. 
+
+Since we have some extra XMEGA registers to work with, we can preload the most used values into specific XMEGA registers and then store from those.
+
+To do this, we sort the values in order of most used and pre-load the top few into XMEGA general purpose registers so we can even skip the `LDI` sometimes and directly store the general purpose register int the LCD register. In the best case where we are updating one of the top 3 LCD registers with one of the top vales and we only need to update 2 of the LCD registers, we can get away with just 2 indirect stores of 1 cycle each for a digit increment!
+
+We use XMEGA registers R18-R27 for this since these are allowed to be changed inside a function. We load these up at the beginning of the `emit_code_for_lcd_steps()` function.
+
+Here are the current top LCD register load values   
+
+```
+// Most common values saved to LCD registers:
+//    Value: 170 Count: 511
+//    Value:  42 Count: 328
+//    Value: 255 Count: 267
+//    Value: 238 Count: 261
+//    Value: 234 Count: 240
+//    Value: 254 Count: 239
+//    Value: 239 Count: 227
+//    Value: 138 Count: 216
+//    Value: 191 Count: 200
+//    Value: 174 Count: 198
+//    Value: 168 Count: 190
+```
+
+### Even better
+
+If I was cool, I would have used [graph coloring](https://en.wikipedia.org/wiki/Register_allocation#Graph-coloring_allocation) to optimally allocate these registers rather than static allocation. Unfortunately I am lazy and this would be much more work for probably an unnoticeable increase in battery life. Still, if you are reading this then you should probably implement this and send me a pull request with your awesome code! :)  
 
 

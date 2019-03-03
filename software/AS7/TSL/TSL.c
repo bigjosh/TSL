@@ -836,8 +836,7 @@ void FOUT_in_pin_enable() {
 
 
     PORTB.INTCTRL = PORT_INT0LVL0_bm;            // PORTB int0 is low level interrupt
-    #warning
-    //PORTB_INT0MASK |= PIN2_bm;                   // Enable pin 7 to be int0
+    PORTB_INT0MASK |= PIN2_bm;                   // Enable pin 7 to be int0
 }
 
 // Returns the current FOUT pin state
@@ -2474,6 +2473,7 @@ int main(void)
     // Note that up until now we have not communicated with the RX8900. It is unclear from the datasheets if we are
     // allowed to communicate now or if we need to wait for the oscillator to stabilize first before talking
     // over TWI, so we take the conservative approach and wait.
+       
 
     _delay_ms(1500);        // tSTA RX8900 oscillator stabilization time 1s max at 25C
                             // "Please perform initial setting only tSTA (oscillation start time), when the
@@ -2481,6 +2481,16 @@ int main(void)
 
                             // Note that we can not use the interrupt to wake us from sleep here because
                             // the RTC is not sending it yet!
+                            
+                            // Note that right now the MOS switch will be open for the first second, and then will close if the
+                            // Vcc voltage is high enough (it should be). 
+                            
+                            /*
+                                 Before the voltage detection is performed the first time (1 sec. after initial power-up), the
+                                 RTC and VBAT are supplied via a diode in parallel to the PMOS-switch. If the voltage detector measures a VDD voltage
+                                 above VDET3-level, the RTC will enter NORMAL operation mode.
+                            */
+                                                        
 
     rx8900_open_MOS();      // Open the switch that connects Vcc to Vbat. This way when the person pulls the battery out, the
                             // capacitor connected to Vbat will not be connected to the XMEGA and will only be used to power the RTC
@@ -2489,11 +2499,6 @@ int main(void)
                             // we also Want to wait at least 1 second because the RTC leaves the switch open for the first 1 second
                             // and it is not defined what happens to the voltage detect registers after that 1 second is up....
 
-    /*
-         Before the voltage detection is performed the first time (1 sec. after initial power-up), the
-         RTC and VBAT are supplied via a diode in parallel to the PMOS-switch. If the voltage detector measures a VDD voltage
-         above VDET3-level, the RTC will enter NORMAL operation mode.
-    */
 
 
     // Now that the RTC is definitely ready, we set the FOUT to 1Hz since we will need that
@@ -2508,11 +2513,10 @@ int main(void)
 
     sei();                  // Note that our ISRs are empty, we only use interrupts to wake from sleep.    
     
+        
+    // Clear the LCD so any upcoming messages will look clean
     clearLCD();
-        
-    showDashes();
-        
-    sleep_cpu();
+
 
     // Diagnostic functions
 
@@ -2566,6 +2570,8 @@ int main(void)
     
     #warning
     
+    lcd_run_for_an_hour();
+    clearLCD();
     
     /*
     while (1) {
@@ -2578,9 +2584,7 @@ int main(void)
         };  
     */
     
-    lcd_run_for_an_hour();    
-    
-
+   
     if ( check_low_battery() ) {
 
         // Show blinking battery icon. Never returns.
@@ -2897,7 +2901,7 @@ int main(void)
     // When we get here, we know that the RTC has a good time and trigger_time is set.
 
     // Now we sleep to make sure we are in sync with the RTC seconds update (the flash takes several
-    // 100's of milliseconds). We want to be right at the beginning of the current second
+    // 10D0's of milliseconds). We want to be right at the beginning of the current second
     // because we do not want to miss a pulse between when we check the time and get counting
     // or our count display will be behind.
 
