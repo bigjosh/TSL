@@ -275,7 +275,7 @@ This is a pretty esoteric case. We would need the same uncached value to get con
 
 Does it ever happen?....
 
-Wholey crap! Wow! It actually happens 15 times!!!
+Wholey crap! Wow! It actually happens 15 times!!! Are you surprised? 
 
 The first time is at 11:31... 
 
@@ -287,10 +287,20 @@ The first time is at 11:31...
     // Found value 170 in cache register
     ST Z,r19                 ; 2040 accesses to R10
     // Skipped redundant load of value  32 into working register. Wow.
+    // Value  32 in LCD register 14 at Step  691 at 11:31
     STS 0x0D1E,r18           ; direct store to LCD register 14
-    // --- Cycles in this step: 6 
+    // --- Cycles in this step: 6
 
-Then again at 11:53...
+Then again at 11:33...
+
+    // ---- Step  693 (11:33)
+    // Found value 250 in cache register
+    ST Y,r03                 ; 2868 accesses to R02
+    // Skipped redundant load of value 160 into working register. Wow.
+    // Value 160 in LCD register 06 at Step  693 at 11:33
+    ST X,r18                 ; 2874 accesses to R06
+    // --- Cycles in this step: 2
+
 
 Here are all the occurrences...
 

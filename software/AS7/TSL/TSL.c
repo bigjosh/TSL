@@ -7,7 +7,7 @@
 
 // Shown on Pin `B` diagnostic display.
 
-#define VERSION 103
+#define VERSION 104
 
 // Required AVR Libraries
 #include <avr/io.h>
@@ -826,25 +826,44 @@ inline uint8_t diagnostic_in_EitherPin_Grounded() {
 // QUIRK: The RX8900 updates the time on the FALLING edge of FOUT.
 
 void FOUT_in_pin_enable() {
-    /*
+    
     PORTB.PIN2CTRL = PORT_ISC_BOTHEDGES_gc;       // Interrupt on both the rising and falling edges of the 1Hz FOE signal from the RTC
                                                   // We will check these on waking and interlock to avoid spurious resets
-    */                                                  
+                                                      
 
-    PORTB.PIN2CTRL = PORT_ISC_FALLING_gc;       // Interrupt on both the rising and falling edges of the 1Hz FOE signal from the RTC
-    // We will check these on waking and interlock to avoid spurious resets
+    // Use this code when all spurious triggers on FOUT are fixed
+    // to interrupt only once per second and avoid the interlock code
+    //PORTB.PIN2CTRL = PORT_ISC_FALLING_gc;       // Interrupt on both the rising and falling edges of the 1Hz FOE signal from the RTC
 
+    PORTB.INTCTRL = PORT_INT0LVL0_bm;            // PORTB int0 is low priority level interrupt
+    PORTB_INT0MASK |= PIN2_bm;                   // Enable pin 7 to be int0    
+    
+    #if FOUT_PIN != 2 
+        #error If you change the FOUT pin you must also update the code in code2code.cpp
+    #endif
 
-    PORTB.INTCTRL = PORT_INT0LVL0_bm;            // PORTB int0 is low level interrupt
-    PORTB_INT0MASK |= PIN2_bm;                   // Enable pin 7 to be int0
+    // Put PORTB onto VP2 so we can test the FOUT signal in single instruction
+    // Note that the VP2 bit 2 is HARDCODED into the code2code program so any changes must be reflected there too
+
+    PORTCFG.VPCTRLB  = PORTCFG_VP2MAP_PORTB_gc;
+
+    /*
+    
+    Note that this test is important, but can not be outside a comment because of the way VPORT0 is implemented a a pointer.
+
+    #if (FOUT_VPORT) != (VPORT2)
+        #error If you change the FOUT VPORT you must also update the code in code2code.cpp
+    #endif
+    
+    */
+            
 }
 
 // Returns the current FOUT pin state
 
 inline uint8_t fout_pin_in_value() {
-    return PORTB.IN & _BV(2);
+    return FOUT_VPORT.IN & _BV(FOUT_PIN);
 }
-
 
 // A new second starts on the falling edge of FOUT
 // This function will sleep until that falling edge
@@ -866,7 +885,6 @@ inline void sleep_until_next_second() {
     while (fout_pin_in_value()) {
         sleep_cpu();
     }
-
 
 }
 

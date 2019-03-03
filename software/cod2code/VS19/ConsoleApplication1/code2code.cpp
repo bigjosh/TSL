@@ -1174,8 +1174,25 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		total_cycle_count += step_cycle_count;
 
+		// Interlock motif
 
-		printasm("SLEEP", "", "Wait for interrupt from RX8900");
+		// Here we have the motif that will sleep until the next second transition
+		// It is slightly complicted by the fact that the TSL V5 sometimes has sputious triggers on the
+		// the FOUT line due to static electricity so we must interlock on it and test both edges
+		// to avoid skipping steps. Hopefully the next version will fix this and we can just use a 
+		// signle sleep triggered on the rising FOUT edge. 
+
+		// NOTE THAT THIS HAS A HARDCODED ASSUMPTION THAT FOUT IS ON VPORT2 PIN 2!!!!
+
+		printblankline();
+		printcomment("Interlock on a high-to-low then low-to-high transition on FOUT (1 second)");
+		printasm("SLEEP"		, "", "Wait for any edge interrupt from RX8900");
+		printasm("SBIC 0x1a, 2", "", "Skip to next phase if !(VPORT2.IN & 0x04)");
+		printasm("RJMP . + 6"	, "", "...or go back to sleep and wait again");
+		printasm("SLEEP"		, "", "Wait for any edge interrupt from RX8900");
+		printasm("SBIS 0x1a, 2", "", "Skip to next phase if (VPORT2.IN & 0x04)");
+		printasm("RJMP . + 6"	, "", "...or go back to sleep and wait again");
+
 
 		/*
 		printf("    asm(\"sleep\");  //\n");
