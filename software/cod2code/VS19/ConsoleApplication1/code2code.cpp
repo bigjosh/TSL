@@ -536,9 +536,10 @@ using namespace std;
 // A snapshot of the LCD regs
 
 typedef struct {
-	uint8_t regs[LCD_REG_COUNT];
+	int regs[LCD_REG_COUNT];		// You can use -1 to mean "not known" since it will always be different than a real value
 } lcd_reg_state;
 
+#define REG_VALUE_UNKNOWN (-1)
 
 // Count all occurances of a key so you can find the most popular ones
 
@@ -662,9 +663,6 @@ void printblankline() {
 	printf("\n");
 }
 
-// Just to have a zeroed out one to copy
-
-lcd_reg_state regs_zero;
 
 // Actually write out the code block.
 // Note that we want the entire list of all state changes here at once rather than taking them one at a time.
@@ -694,7 +692,10 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		for (uint8_t r = 0; r < LCD_REG_COUNT; r++) {
 
-			if (regs_now.regs[r] != regs_next.regs[r]) {		// Dont count if the register did not change
+			// Only care if (1) new value is set, and new value is different from old value
+			// note that this will catch a change from unknown to anything else
+
+			if (regs_next.regs[r] != REG_VALUE_UNKNOWN && regs_now.regs[r] != regs_next.regs[r]) {		
 
 				// Count the access to this register
 				lcd_reg_access_top_finder.increment(r);
@@ -764,14 +765,16 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 	string_buffer reg_access_comment_strings[LCD_REG_COUNT];
 	int reg_access_cyclecount[LCD_REG_COUNT];					// Keep track of how many cycles this instruction takes for metrics
 
-	bool x_alocated_flag = false;
-	bool y_alocated_flag = false;
-	bool z_alocated_flag = false;
+	bool x_alocated_flag = true;	// TODO: 
+	bool y_alocated_flag = true;
+	bool z_alocated_flag = true;
+
+	// Run though the LCD registers, most popular first, and asign the top ones to index registers. 
 
 	for (auto const& reg : sorted_lcd_regsisters) {
 
 
-		if (!x_alocated_flag) {
+		if (!x_alocated_flag ) { 
 
 			string_buffer asm_buffer;
 			string_buffer comment_buffer;
@@ -868,7 +871,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	int total_cycle_count = 0;		// Keep track of total cycles to run though the sequence (assming no blocks or banches)
 
-	sequence_count = 10;
+	//sequence_count = 61;
 
 	for (int i = 0; i < sequence_count; i++) {
 
@@ -882,7 +885,10 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		for (uint8_t r = 0; r < LCD_REG_COUNT; r++) {
 
-			if (regs_now.regs[r] != regs_next.regs[r]) {
+			// Only care if (1) new value is set, and new value is different from old value
+			// note that this will catch a change from unknown to anything else
+
+			if (regs_next.regs[r] != REG_VALUE_UNKNOWN && regs_now.regs[r] != regs_next.regs[r] ) {
 
 				// Note: we use R18 becuase it is not expected to be saved across calls and LDI needs a register higher than r16 so we can't use temp_reg
 
@@ -897,9 +903,14 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 				} 
 
-
 				sprintf_s( asm_buffer , string_bufer_len , "LDI r18,0x%2.02x" , regs_next.regs[r] );
-				sprintf_s( comment_buffer, string_bufer_len, "Was %2.2x", regs_now.regs[r]);
+
+				if (regs_now.regs[r] == REG_VALUE_UNKNOWN) {
+					sprintf_s(comment_buffer, string_bufer_len, "Was UNKNOWN");
+				}
+				else {
+					sprintf_s(comment_buffer, string_bufer_len, "Was %2.2x", regs_now.regs[r]);
+				}
 
 				step_cycle_count += 1;		// LDI = 1 cycle
 
@@ -917,8 +928,8 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		}
 
 		sprintf_s(comment_buffer, string_bufer_len, "--- Cycles in this step: %d", step_cycle_count);
-
 		printcomment(comment_buffer);
+
 		total_cycle_count += step_cycle_count;
 
 
@@ -932,6 +943,10 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		*/
 
 	}
+
+	sprintf_s(comment_buffer, string_bufer_len, "--- Total display update cycles in sequence: %d", total_cycle_count );
+	printcomment(comment_buffer);
+
 
 	cout << "}" << endl;
 
@@ -949,7 +964,19 @@ void setlcdregsfordigit(lcd_reg_state * lcd_regs, uint8_t place, uint8_t n) {
 
 			// This pixel is lit, so set the bit in the show regs
 
-			lcd_regs->regs[LCD_REG_OFF(digitmap[place][p].com, digitmap[place][p].seg)] |= (1 << LCD_REG_BIT(digitmap[place][p].com, digitmap[place][p].seg));
+			uint8_t target_reg = LCD_REG_OFF(digitmap[place][p].com, digitmap[place][p].seg);
+
+			// If we have never set this register before, then set it to zero
+			// we do this so we only need to set bits for pixels that should be on
+			// (0 in the reg means all pixels off)
+
+			if (lcd_regs->regs[target_reg] == REG_VALUE_UNKNOWN) {
+
+				lcd_regs->regs[target_reg] = 0; 
+
+			}
+
+			lcd_regs->regs[target_reg] |= (1 << LCD_REG_BIT(digitmap[place][p].com, digitmap[place][p].seg));
 
 			//printf("set place=%d n=%d p=%d\r\n", place, n, p);
 
@@ -966,9 +993,27 @@ void setlcdregsfordigit(lcd_reg_state * lcd_regs, uint8_t place, uint8_t n) {
 
 void lcdEmit1hourCode() {
 
-	lcd_reg_state regs_init = regs_zero;
+	// All regs set to REG_VALUE_UNKNOWN
 
-	lcd_reg_state reg_steps[60 * 60];
+	lcd_reg_state regs_unknown;
+
+	// Initialize
+	for (auto  &reg : regs_unknown.regs) {
+		reg = REG_VALUE_UNKNOWN;
+	}
+
+
+	lcd_reg_state regs_zero;
+
+	// Initialize
+	for (auto& reg : regs_zero.regs) {
+		reg = 0;
+	}
+
+
+	lcd_reg_state regs_init = regs_unknown;		// We do't know any of the registers when we start
+
+	lcd_reg_state reg_steps[60 * 60];			// 60 seconds * 60 minutes = 1 hour
 
 	int step = 0;
 
@@ -977,17 +1022,14 @@ void lcdEmit1hourCode() {
 
 		for (uint8_t s = 0; s < 60; s++) {
 
-			//printf("m=%d s=%d\r\n", m, s);
 
+			// Initial all regs to unknown. The set functions below check to see if a 
+			// reg that wan to update is unknown, and if so they will set it to zero
+			// before setting the pixel bits. 
 
-			// Init to all 0 so we only need to set pixels that should be on.
+			// This way any regs that are not touched will stay unknown.
 
-			// Since all other digits start at 0 and end at zero and since the code emitter
-			// does not output anything for registers that do not change between steps, then
-			// the emitted code will only touch the rightmost 4 digits on the LCD display
-			// and leave the others however they were.
-
-			lcd_reg_state lcd_regs = regs_zero;
+			lcd_reg_state lcd_regs = regs_unknown;
 
 			setlcdregsfordigit(&lcd_regs, 0, s % 10);
 			setlcdregsfordigit(&lcd_regs, 1, s / 10);
