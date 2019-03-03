@@ -765,34 +765,53 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 	string_buffer reg_access_comment_strings[LCD_REG_COUNT];
 	int reg_access_cyclecount[LCD_REG_COUNT];					// Keep track of how many cycles this instruction takes for metrics
 
-	bool x_alocated_flag = true;	// TODO: 
-	bool y_alocated_flag = true;
-	bool z_alocated_flag = true;
-
 	// Run though the LCD registers, most popular first, and asign the top ones to index registers. 
+
+	struct index_reg_t {
+
+		char name;
+		int high_reg;
+		int low_reg;
+		bool assigned;
+		int lcd_address_offset;
+
+	};
+
+	vector<index_reg_t> index_regs = {
+		{ 'X' ,  27 , 26 , false , 0 },
+	//	{ 'Y' ,  29 , 28 , false , 0 },
+		{ 'Z' ,  31 , 30 , false , 0 },
+	};
 
 	for (auto const& reg : sorted_lcd_regsisters) {
 
+		// See if any index registers are still available to alocate....
+		// (remeber we are processing registers most popular first, so grab the indexes as quick as you can!)
 
-		if (!x_alocated_flag ) { 
+		auto first_free_index_reg = std::find_if( index_regs.begin(), index_regs.end() , [](index_reg_t s) { return !s.assigned; });
+
+		if ( first_free_index_reg != index_regs.end() ) { 
 
 			string_buffer asm_buffer;
 			string_buffer comment_buffer;
-
-			sprintf_s( asm_buffer , string_bufer_len, "LDI XH,0x%2.02x" , LCD_REGS_BASE_HIGH );		// Store to index reg X the location of the LCD register
-			sprintf_s( comment_buffer, string_bufer_len, "Store high byte of address of LCD reg %02d to X", reg.key);		// Store to index reg Z the location of the LCD register
-			printasm(asm_buffer, "r27", comment_buffer);	// Apparently clobbers filed doesnt know about *H register name
+			string_buffer clobber_buffer;
 
 
-			sprintf_s(asm_buffer, string_bufer_len, "LDI XL,0x%2.02x", LCD_REGS_BASE_LOW + reg.key );		// Store to index reg X the location of the LCD register
-			sprintf_s(comment_buffer, string_bufer_len, "Store low byte of address of LCD reg %02d to X", reg.key);		// Store to index reg X the location of the LCD register
-			printasm(asm_buffer, "r26", comment_buffer); // Apparently clobbers filed doesnt know about *L register name
+			sprintf_s( asm_buffer , string_bufer_len, "LDI r%02d,0x%2.02x" , first_free_index_reg->high_reg,  LCD_REGS_BASE_HIGH );		// Store to index reg the location of the LCD register
+			sprintf_s( comment_buffer, string_bufer_len, "Store high byte of address of LCD reg %02d to %c", reg.key , first_free_index_reg->name  );		// Store to index reg Z the location of the LCD register
+			sprintf_s(clobber_buffer, string_bufer_len, "r%02d", first_free_index_reg->high_reg);		// Store to index reg the location of the LCD register
+			printasm(asm_buffer, clobber_buffer , comment_buffer);	// Apparently clobbers filed doesnt know about *H register name
 
+			sprintf_s(asm_buffer, string_bufer_len, "LDI r%02d,0x%2.02x", first_free_index_reg->low_reg, LCD_REGS_BASE_LOW + reg.key);		// Store to index reg the location of the LCD register
+			sprintf_s(comment_buffer, string_bufer_len, "Store low byte of address of LCD reg %02d to %c", reg.key, first_free_index_reg->name);		// Store to index reg Z the location of the LCD register
+			sprintf_s(clobber_buffer, string_bufer_len, "r%02d", first_free_index_reg->low_reg);		// Store to index reg the location of the LCD register
+			printasm(asm_buffer, clobber_buffer, comment_buffer);	// Apparently clobbers filed doesnt know about *H register name
 
-			sprintf_s( reg_access_asm_strings[reg.key] , string_bufer_len, "ST X,r%%02d" );		// Store to index reg X location
+			sprintf_s( reg_access_asm_strings[reg.key] , string_bufer_len, "ST %c,r%%02d" , first_free_index_reg->name );		// Store to index reg X location
 			sprintf_s( reg_access_comment_strings[reg.key], string_bufer_len, "%d accesses to R%02d" , reg.count , reg.key );		// Store to index reg X location
 			reg_access_cyclecount[reg.key] = 1; // ST only 1 cycle!
-			x_alocated_flag = true;
+
+			first_free_index_reg->assigned = true;
 
 		}
 		else {
@@ -805,7 +824,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	}
 
-
+	printblankline();
 	printcomment("Next we will load up the some available XMEGA registers with the most commonly");
 	printcomment("stored values so we can save an LDI to load them again.");
 
@@ -871,7 +890,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	int total_cycle_count = 0;		// Keep track of total cycles to run though the sequence (assming no blocks or banches)
 
-	//sequence_count = 61;
+	sequence_count = 10;
 
 	for (int i = 0; i < sequence_count; i++) {
 
