@@ -837,6 +837,8 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 	const int working_reg = 18;		//  We marked this as not availabel above so we can use it as a working register. 
 									// We want something that is LDI direct loadable. 
 
+	int working_reg_value = REG_VALUE_UNKNOWN;		// Keep track of the current value in the working reg so we can skip redundant loads
+
 
 	// Keep track of pushed and popped registers
 	struct stack_manager_type {
@@ -973,6 +975,8 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 				sprintf_s(asm_buffer, string_bufer_len, "LDI r%02d,%02d", working_reg , reg_value.key);
 				sprintf_s(comment_buffer, string_bufer_len, "Load cache value %3d into working_reg", reg_value.key );
 				printasm(asm_buffer, "", comment_buffer);
+
+				working_reg_value = reg_value.key;
 
 				sprintf_s(asm_buffer, string_bufer_len, "MOV r%02d,%02d", reg , working_reg );
 				sprintf_s(comment_buffer, string_bufer_len, "Move value %3d into reg %02d (used %d times)", reg_value.key, reg, reg_value.count);
@@ -1124,16 +1128,31 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 					source_reg = found_cache_reg->reg;
 
-				}
-				else {
+				} else {
 
-					// This value is not already loaded anywhere, so we have to LDI it int the working register
-					// and use it from there
+					// This value is not in a cache register , so we need it int the working register
+					// and will use it from there
 
-					sprintf_s(asm_buffer, string_bufer_len, "LDI r%02d,0x%2.02x", working_reg, new_value);
-					printasm(asm_buffer, "", "Load uncached value into working register" );	// Apparently clobber field only likes lower case
+					if (new_value == working_reg_value) {		// No need to load the working_reg with a value if it is already set from last time
 
-					step_cycle_count += 1;		// LDI = 1 cycle
+						sprintf_s(comment_buffer, string_bufer_len, "Skipped redundant load of value %3d into working register. Wow.", new_value);
+						printcomment(comment_buffer);
+
+						sprintf_s(comment_buffer, string_bufer_len, "Value %3d in LCD register %02d at Step %4d at %02d:%02d", new_value , r , i, i / 60, i % 60);
+						printcomment(comment_buffer);
+
+					} else {
+
+						// Need to get the new_value into the working reg
+
+						sprintf_s(asm_buffer, string_bufer_len, "LDI r%02d,0x%2.02x", working_reg, new_value);
+						printasm(asm_buffer, "", "Load uncached value into working register");	// Apparently clobber field only likes lower case
+
+						working_reg_value = new_value;
+
+						step_cycle_count += 1;		// LDI = 1 cycle
+
+					}
 
 					source_reg = working_reg;
 
