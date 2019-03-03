@@ -771,7 +771,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 	cout << "// Step though a full hour of LCD updates (3600 in all)\n\n";
 
 	cout << ".global update_lcd_1_hour" << endl;
-	cout << ".section.text" << endl;
+	cout << ".section    .text" << endl;
 	cout << "update_lcd_1_hour :" << endl;
 
 	cout << "" << endl;
@@ -794,10 +794,10 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	const avr_reg_type avr_regs[32] = {
 
-		{false , false, false },		// 0 = temp_reg. We will use this for values that are not cached
-		{false , false, false },		// 1 = zero_reg. This comes preloaded. We will use this for 0. 
+		{true , true, false },			// 0 = temp_reg. We will use this for values that are not cached.
+		{true , true, false },			// 1 = zero_reg. This comes preloaded. We must save and restore it, but if we do then we can use it for other things. 
 
-		{true  , true, false },				// r2-r17 "Call-used registers. Assembler subroutines are responsible for saving and restoring these registers, if changed."
+		{true  , true, false },			// r2-r17 "Call-used registers. Assembler subroutines are responsible for saving and restoring these registers, if changed."
 		{true  , true, false },
 		{true  , true, false },
 		{true  , true, false },
@@ -814,7 +814,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		{true  , true, false },
 		{true  , true, true  },			// LDI can address r16-31
 
-		{true  , false, true  },		// r18-r25 "You may use them freely in assembler subroutines."
+		{false  , false, true  },		// r18-r25 "You may use them freely in assembler subroutines." We save r18 to use as a "working" register in cases where we need a value that is not cached.
 		{true  , false, true  },
 		{true  , false, true  },
 		{true  , false, true  },
@@ -834,9 +834,8 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	};
 
-	// These are set up be GCC
-	const int temp_reg = 0;			// Can use for anything, anytime
-	const int zero_reg = 1;			// will/must always be 0
+	const int working_reg = 18;		//  We marked this as not availabel above so we can use it as a working register. 
+									// We want something that is LDI direct loadable. 
 
 
 	// Keep track of pushed and popped registers
@@ -942,7 +941,6 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		if (lowest_cost_available_reg != avr_reg_table.end()) {
 
-
 			// OK, we have an available register!
 
 			int reg = lowest_cost_available_reg->reg;
@@ -972,11 +970,11 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 				// We can NOT LDI directly to this reg, so we have to use temp reg to load it
 
-				sprintf_s(asm_buffer, string_bufer_len, "LDI r%02d,%02d", temp_reg , reg_value.key);
-				sprintf_s(comment_buffer, string_bufer_len, "Load cache value %3d into temp_reg", reg_value.key, reg, reg_value.count);
+				sprintf_s(asm_buffer, string_bufer_len, "LDI r%02d,%02d", working_reg , reg_value.key);
+				sprintf_s(comment_buffer, string_bufer_len, "Load cache value %3d into working_reg", reg_value.key );
 				printasm(asm_buffer, "", comment_buffer);
 
-				sprintf_s(asm_buffer, string_bufer_len, "MOV r%02d,%02d", reg , temp_reg );
+				sprintf_s(asm_buffer, string_bufer_len, "MOV r%02d,%02d", reg , working_reg );
 				sprintf_s(comment_buffer, string_bufer_len, "Move value %3d into reg %02d (used %d times)", reg_value.key, reg, reg_value.count);
 				printasm(asm_buffer, "", comment_buffer);
 
@@ -1037,11 +1035,13 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 			if (first_free_index_reg->name == 'Y') {
 
 				// This is a special case for Y becuase the compiler uses it for a stack frame
-				// so we need to save it. 
+				// so we need to save it. The stack_manager will remeber that we saved it and automatically
+				// restore it when we call popall(). 
 
 				printcomment("Save Y registers since C uses them for the stack frame");
 				stack_manager.push(first_free_index_reg->high_reg);
 				stack_manager.push(first_free_index_reg->low_reg);
+				printblankline();
 
 			}
 
@@ -1081,7 +1081,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	int total_cycle_count = 0;		// Keep track of total cycles to run though the sequence (assming no blocks or banches)
 
-	sequence_count = 20;
+	//sequence_count = 20;
 
 	for (int i = 0; i < sequence_count; i++) {
 
@@ -1100,33 +1100,46 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 			if (regs_next.regs[r] != REG_VALUE_UNKNOWN && regs_now.regs[r] != regs_next.regs[r] ) {
 
-				// Note: we use R18 becuase it is not expected to be saved across calls and LDI needs a register higher than r16 so we can't use temp_reg
+				int new_value = regs_next.regs[r];		// This is the value we want to store 
 
-				int source_reg;
+				// Look and see if we have this value in a cache register...
 
-				if (regs_next.regs[r] == 0x00) {
+				struct assigned_and_matching_value_functor : std::unary_function< avr_reg_and_cost_type , bool>
+				{
+					assigned_and_matching_value_functor(const int& value) : value(value) {}
+					bool operator()(const avr_reg_and_cost_type& arg) const { return arg.assigned && arg.value == value; }
+					const int& value;
+				};
 
-					// Easy case - we need to store a zero so use the zero reg with is in R01
-					// Note that we do not have to load it, it is always zero
+				int source_reg;		// The AVR register that has the value that we want to store in it (assigned either to a cache or to temp reg
 
-					source_reg = 1;
+				auto found_cache_reg = std::find_if(avr_reg_table.begin(), avr_reg_table.end(), assigned_and_matching_value_functor( new_value ) );
 
-				} 
+				if (found_cache_reg != avr_reg_table.end()) {
 
-				sprintf_s( asm_buffer , string_bufer_len , "LDI r18,0x%2.02x" , regs_next.regs[r] );
+					// We found a matching value in the table of cache registers that we can use directly
 
-				if (regs_now.regs[r] == REG_VALUE_UNKNOWN) {
-					sprintf_s(comment_buffer, string_bufer_len, "Was UNKNOWN");
+					sprintf_s(comment_buffer, string_bufer_len, "Found value %3d in cache register" , new_value );
+					printcomment(comment_buffer);
+
+					source_reg = found_cache_reg->reg;
+
 				}
 				else {
-					sprintf_s(comment_buffer, string_bufer_len, "Was %2.2x", regs_now.regs[r]);
+
+					// This value is not already loaded anywhere, so we have to LDI it int the working register
+					// and use it from there
+
+					sprintf_s(asm_buffer, string_bufer_len, "LDI r%02d,0x%2.02x", working_reg, new_value);
+					printasm(asm_buffer, "", "Load uncached value into working register" );	// Apparently clobber field only likes lower case
+
+					step_cycle_count += 1;		// LDI = 1 cycle
+
+					source_reg = working_reg;
+
 				}
 
-				step_cycle_count += 1;		// LDI = 1 cycle
-
-				printasm(asm_buffer, "r18", comment_buffer);	// Apparently clobber field only likes lower case
-
-				sprintf_s(asm_buffer, string_bufer_len, reg_access_asm_strings[r], 18 );
+				sprintf_s(asm_buffer, string_bufer_len, reg_access_asm_strings[r], source_reg );
 				printasm(asm_buffer, "", reg_access_comment_strings[r] );
 
 				step_cycle_count += reg_access_cyclecount[r];		// Count how ever many cycles this store took

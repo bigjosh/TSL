@@ -177,14 +177,14 @@ This gives us 3 cycles per LCD register*  4 LCD registers per update = 12 cycles
 Here is an example update where all 4 LCD registers are updated....
 
     // ---- Step 3599 (59:59)
-    asm("LDI r18,0xff        ":::"r18");    // Was ff
-    asm("STS 0x0D12,r18      ":::     );    // direct store to LCD register 02
-    asm("LDI r18,0xaa        ":::"r18");    // Was ea
-    asm("STS 0x0D16,r18      ":::     );    // direct store to LCD register 06
-    asm("LDI r18,0xdd        ":::"r18");    // Was dd
-    asm("STS 0x0D1A,r18      ":::     );    // direct store to LCD register 10
-    asm("LDI r18,0xaa        ":::"r18");    // Was aa
-    asm("STS 0x0D1E,r18      ":::     );    // direct store to LCD register 14
+    LDI r18,0xff             ; Was UNKNOWN
+    STS 0x0D12,r18           ; direct store to LCD register 02
+    LDI r18,0xaa             ; Was UNKNOWN
+    STS 0x0D16,r18           ; direct store to LCD register 06
+    LDI r18,0xdd             ; Was UNKNOWN
+    STS 0x0D1A,r18           ; direct store to LCD register 10
+    LDI r18,0xaa             ; Was UNKNOWN
+    STS 0x0D1E,r18           ; direct store to LCD register 14
     // --- Cycles in this step: 12
 
 ## Skip redundant stores
@@ -194,17 +194,18 @@ If an LCD register already has a value then we do not need to store that value a
 Here is an example here only a single register needs to be updated between 59:58 and 59:59 because there is only pixel that needs to change (see which?)...
 
     // ---- Step 3598 (59:58)
-    asm("LDI r18,0xff        ":::"r18");    // Was bf
-    asm("STS 0x0D12,r18      ":::     );    // direct store to LCD register 02
-    asm("LDI r18,0xea        ":::"r18");    // Was 2a
-    asm("STS 0x0D16,r18      ":::     );    // direct store to LCD register 06
-    asm("LDI r18,0xdd        ":::"r18");    // Was 9d
-    asm("STS 0x0D1A,r18      ":::     );    // direct store to LCD register 10
+    LDI r18,0xff             ; Was bf
+    STS 0x0D12,r18           ; direct store to LCD register 02
+    LDI r18,0xea             ; Was 2a
+    STS 0x0D16,r18           ; direct store to LCD register 06
+    LDI r18,0xdd             ; Was 9d
+    STS 0x0D1A,r18           ; direct store to LCD register 10
     // --- Cycles in this step: 9
+    SLEEP                    ; Wait for interrupt from TX8900
 
     // ---- Step 3599 (59:59)
-    asm("LDI r18,0xaa        ":::"r18");    // Was ea
-    asm("STS 0x0D16,r18      ":::     );    // direct store to LCD register 06
+    LDI r18,0xaa             ; Was ea
+    STS 0x0D16,r18           ; direct store to LCD register 06
     // --- Cycles in this step: 3
 
 
@@ -231,7 +232,6 @@ Here is an example where it only takes 2 cycles to update from 59:58 to 59:59 be
     ST X,r18                 ; 2874 accesses to R06
     // --- Cycles in this step: 2
 
-
 ## Stashing the values that get stored into the LCD registers
 
 Both the indirect `ST` and the direct `STS` store instructions store a value that is already loaded into one of the XMEGA registers. 
@@ -240,9 +240,7 @@ The fastest way to load a precomputed value into an XMEGA register is using the 
 
 Since we have some extra XMEGA registers to work with, we can preload the most used values into specific XMEGA registers and then store from those.
 
-To do this, we sort the values in order of most used and pre-load the top few into XMEGA general purpose registers so we can even skip the `LDI` sometimes and directly store the general purpose register int the LCD register. In the best case where we are updating one of the top 3 LCD registers with one of the top vales and we only need to update 2 of the LCD registers, we can get away with just 2 indirect stores of 1 cycle each for a digit increment!
-
-We use XMEGA registers R18-R27 for this since these are allowed to be changed inside a function. We load these up at the beginning of the `emit_code_for_lcd_steps()` function.
+To do this, we sort the values in order of most used and pre-load the most used ones into XMEGA general purpose registers so we can even skip the `LDI` sometimes and directly store the general purpose register int the LCD register. In the best case where we are updating one of the top 3 LCD registers with one of the cached values and we only need to update 1 of the LCD registers, we can get away with just 1 indirect store of 1 cycle for a digit increment!
 
 Here are the current top LCD register load values   
 
@@ -261,6 +259,12 @@ Here are the current top LCD register load values
 //    Value: 168 Count: 190
 ```
 
+There is some very complicated code to map the values into AVR cache registers since not all registers are the same. We can only sue some register because some are used for other things, some of the registers must be saved before we use them and then restored before we return to the normal C program ("call saved registers"), and some registers can not be a target of the `LDI` instruction so we need to account for the extra cost of loading the value into a temp register and then loading into the target register. 
+
+But is it all worth it! Look at this single cycle update from 59:58 to 59:59...
+
+
+
 ### Even better
 
 If I was cool, I would have used [graph coloring](https://en.wikipedia.org/wiki/Register_allocation#Graph-coloring_allocation) to optimally allocate these registers rather than static allocation. Unfortunately I am lazy and this would be much more work for probably an unnoticeable increase in battery life. Still, if you are reading this then you should probably implement this and send me a pull request with your awesome code! :)  
@@ -268,8 +272,9 @@ If I was cool, I would have used [graph coloring](https://en.wikipedia.org/wiki/
 While you are at it, we could also optimize the order of assignments in each step to maximum the number of times that a register loaded in one step can be reused in the next step. I'm sure there is a general solution to this, but a brute force approach could just try all 4*4 orders and keep track of the one that has the lowest number of loads and use that one. 
 
 # Results
-| Optimization | Total Update Cycles |
+| Optimization | Total Display Update Cycles |
 | - | -: |
 | None | 43,200 |
 | Skip redundant stores |  28,377 |
-
+| Use 3 index registers |  20,595 |
+| Use cache registers | |  15,737 |
