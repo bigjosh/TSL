@@ -2,7 +2,7 @@
 
 To save power, we want to spend as much time sleeping as possible. When we wake up, we need to update the LCD display as quickly as possible and then go back to sleep.
 
-To this end, we want to find the optimal set of instructions to update the LCD display from the current value to the next one in as few cycles as possible.
+To this end, we want to find the optimal set of instructions to update the LCD display from the current value to the next one in as few cycles as possible. We need an LCD compiler!
 
 The LCD display segments are represented as bits in the XMEGA LCD registers. Because the LCD module is multiplexed, these bits are not contiguous across registers. The bits for the segments in each digit are spread across as many as 4 registers (one for each of the common pins). 
 
@@ -164,9 +164,53 @@ This code that writes code needs to know all about the LCD layout and the regist
 
 So what is the best way to actually implement the pseduo code above on our XMEGA?
 
+## Naive
+
+The simplest method is to update each of the 4 LCD registers with their desired values on each step. 
+
+Each register update requires an `LDI` load (1 cycle) to put the value we want into an XMEGA register, and then an `STS` store (2 cycles) to the LCD register address.      
+
+This gives us 3 cycles per LCD register*  4 LCD registers per update = 12 cycles per update.
+
+12 cycles per update * 3600 updates = 43,200 cycles per sequence
+
+Here is an example update where all 4 LCD registers are updated....
+
+    // ---- Step 3599 (59:59)
+    asm("LDI r18,0xff        ":::"r18");    // Was ff
+    asm("STS 0x0D12,r18      ":::     );    // direct store to LCD register 02
+    asm("LDI r18,0xaa        ":::"r18");    // Was ea
+    asm("STS 0x0D16,r18      ":::     );    // direct store to LCD register 06
+    asm("LDI r18,0xdd        ":::"r18");    // Was dd
+    asm("STS 0x0D1A,r18      ":::     );    // direct store to LCD register 10
+    asm("LDI r18,0xaa        ":::"r18");    // Was aa
+    asm("STS 0x0D1E,r18      ":::     );    // direct store to LCD register 14
+    // --- Cycles in this step: 12
+
+## Skip redundant stores
+
+If an LCD register already has a value then we do not need to store that value again on the next step. This does not happen as often as you might hope because the pixels in the digits are spread across the LCD registers, but it does happen when there are two consecutive steps that only have a single pixel change like xxx5->xxx6 or xxx8->xxx9.
+
+Here is an example here only a single register needs to be updated between 59:58 and 59:59 because there is only pixel that needs to change (see which?)...
+
+    // ---- Step 3598 (59:58)
+    asm("LDI r18,0xff        ":::"r18");    // Was bf
+    asm("STS 0x0D12,r18      ":::     );    // direct store to LCD register 02
+    asm("LDI r18,0xea        ":::"r18");    // Was 2a
+    asm("STS 0x0D16,r18      ":::     );    // direct store to LCD register 06
+    asm("LDI r18,0xdd        ":::"r18");    // Was 9d
+    asm("STS 0x0D1A,r18      ":::     );    // direct store to LCD register 10
+    // --- Cycles in this step: 9
+
+    // ---- Step 3599 (59:59)
+    asm("LDI r18,0xaa        ":::"r18");    // Was ea
+    asm("STS 0x0D16,r18      ":::     );    // direct store to LCD register 06
+    // --- Cycles in this step: 3
+
+
 ## Indirect stores save a cycle
 
-Indirect stores on the XMEGA with `ST` only take 1 cycle, but there are only a total of 3 indirect pointers (X,Y,Z). We need 4 registers to generally update any digit (or set of 4 contiguous digits). So we pick the 3 LCD registers that are updated most often and we initialize the 3 indirect pointers to point to those. For the 4th (least used) register, we bite the bullet and do an `STS` directly to the address which costs 2 cycles.
+Indirect stores on the XMEGA with `ST` only take 1 cycle, but there are only a total of 3 indirect pointers (X,Y,Z). We need 4 LCD registers to generally update any digit (or set of 4 contiguous digits). So we pick the 3 LCD registers that are updated most often and we initialize the 3 indirect pointers to point to those. For the 4th (least used) register, we bite the bullet and do an `STS` directly to the address which costs 2 cycles.
 
 The LCD registers are listed in order of popularity in a comment at the top of the output.c file for reference. Here are the current values...
 
@@ -174,12 +218,19 @@ The LCD registers are listed in order of popularity in a comment at the top of t
     //    REG:  6 Count: 2880
     //    REG:  2 Count: 2868
     //    REG: 10 Count: 2040
-    //    REG: 14 Count: 1709 
+    //    REG: 14 Count: 1709
     
-The index registers are loaded with the addresses of the top 3 LCD registers at the very top of the `emit_code_for_lcd_steps()` function. Note that we must `PUSH` register `Y` and then pop it again before returning since it is guaranteed to be [saved across function calls](https://www.microchip.com/webdoc/AVRLibcReferenceManual/FAQ_1faq_reg_usage.html). Note that `Y` is stored in `R28` & `R29`. Luckily these pushes and pops only cost 1 cycle each, so a total of 4 cycles to save about 2040 cycles over the course of the 3600 updates.
+The index registers are loaded with the addresses of the top 3 LCD registers at the very top of the `emit_code_for_lcd_steps()` function. Note that we must `PUSH` register `Y` and then pop it again before returning since it is guaranteed to be [saved across function calls](https://www.microchip.com/webdoc/AVRLibcReferenceManual/FAQ_1faq_reg_usage.html).  Luckily these pushes and pops only cost 1 cycle each, so a total of 4 cycles to save about 2040 cycles over the course of the 3600 updates.
 
 Note that X, Y, and Z registers are actually pairs of XMEGA registers r27:r26, r29:r28 and r31:r30. Some instructions use the letters (`ST X`) and others use the numbers (`LDI R27`).  
-  
+
+Here is an example where it only takes 2 cycles to update from 59:58 to 59:59 because only one LCD register changes, and that LCD register is assigned to the `X` index register so it only takes 1 cycle to write to it..
+
+    // ---- Step 3599 (59:59)
+    LDI r18,0xaa             ; Was ea
+    ST X,r18                 ; 2874 accesses to R06
+    // --- Cycles in this step: 2
+
 
 ## Stashing the values that get stored into the LCD registers
 
@@ -214,4 +265,11 @@ Here are the current top LCD register load values
 
 If I was cool, I would have used [graph coloring](https://en.wikipedia.org/wiki/Register_allocation#Graph-coloring_allocation) to optimally allocate these registers rather than static allocation. Unfortunately I am lazy and this would be much more work for probably an unnoticeable increase in battery life. Still, if you are reading this then you should probably implement this and send me a pull request with your awesome code! :)  
 
+While you are at it, we could also optimize the order of assignments in each step to maximum the number of times that a register loaded in one step can be reused in the next step. I'm sure there is a general solution to this, but a brute force approach could just try all 4*4 orders and keep track of the one that has the lowest number of loads and use that one. 
+
+# Results
+| Optimization | Total Update Cycles |
+| - | -: |
+| None | 43,200 |
+| Skip redundant stores |  28,377 |
 

@@ -163,6 +163,12 @@
     </ToolchainSettings>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="code2code_output.h">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="code2code_output.s">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="lcd.c">
       <SubType>compile</SubType>
     </Compile>

@@ -629,7 +629,7 @@ struct Top_finder {
 const int string_bufer_len = 80;
 typedef char string_buffer[string_bufer_len];
 
-void printasm(const char* s, const char * clobbers , const char *comment) {
+void printc(const char* s, const char * clobbers , const char *comment) {
 
 	string_buffer clobbers_string;
 	string_buffer comment_string;
@@ -651,6 +651,22 @@ void printasm(const char* s, const char * clobbers , const char *comment) {
 	printf("    asm(\"%-20s\":::%s);%s\n",  s , clobbers_string , comment_string );
 
 }
+
+void printasm(const char* s, const char* clobbers, const char* comment) {
+
+	string_buffer comment_string;
+
+	if (comment && *comment) {
+		sprintf_s(comment_string, string_bufer_len, "    ; %s", comment);
+	}
+	else {
+		sprintf_s(comment_string, string_bufer_len, "");		// empty
+	}
+
+	printf("    %-20s %s\n", s,  comment_string);
+
+}
+
 
 
 void printcomment(const char* comment) {
@@ -779,7 +795,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	vector<index_reg_t> index_regs = {
 		{ 'X' ,  27 , 26 , false , 0 },
-	//	{ 'Y' ,  29 , 28 , false , 0 },
+		{ 'Y' ,  29 , 28 , false , 0 },
 		{ 'Z' ,  31 , 30 , false , 0 },
 	};
 
@@ -890,7 +906,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	int total_cycle_count = 0;		// Keep track of total cycles to run though the sequence (assming no blocks or banches)
 
-	sequence_count = 10;
+	//sequence_count = 20;
 
 	for (int i = 0; i < sequence_count; i++) {
 

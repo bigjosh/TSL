@@ -22,6 +22,8 @@
 
 #include "output.h"             // Include the call to the computer generated code that updates the LCD for an hour
 
+#include "code2code_output.h"
+
 #define F_CPU 2000000		// Default internal RC clock on startup
 
 #define RX8900_TWI_ADDRESS 0b0110010        // RX8900 8.9.5 (datasheet page 29)
@@ -2570,7 +2572,7 @@ int main(void)
     
     #warning
     
-    lcd_run_for_an_hour();
+    update_lcd_1_hour();
     clearLCD();
     
     /*
