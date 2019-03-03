@@ -175,12 +175,6 @@
     <Compile Include="lcd.h">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="output.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="output.h">
-      <SubType>compile</SubType>
-    </Compile>
     <Compile Include="TSL.c">
       <SubType>compile</SubType>
     </Compile>

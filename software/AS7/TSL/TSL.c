@@ -20,9 +20,7 @@
 
 #include "USI_TWI_Master.h"
 
-#include "output.h"             // Include the call to the computer generated code that updates the LCD for an hour
-
-#include "code2code_output.h"
+#include "code2code_output.h"   // Include the call to the computer generated code that updates the LCD for an hour
 
 #define F_CPU 2000000		// Default internal RC clock on startup
 
