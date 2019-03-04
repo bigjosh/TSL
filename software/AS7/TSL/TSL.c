@@ -2443,7 +2443,7 @@ void showPinT() {
 }
 
 int main(void)
-{
+{  
 
     // Enable the ultra low power XMEGA clock
     // We will drive the LCD from this
@@ -2587,7 +2587,8 @@ int main(void)
     */
     
     #warning
-    
+    update_lcd_1_hour_starting_at(4);
+    update_lcd_1_hour_starting_at(10);    
     update_lcd_1_hour();
     clearLCD();
     

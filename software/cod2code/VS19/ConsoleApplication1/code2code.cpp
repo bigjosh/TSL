@@ -768,14 +768,26 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	cout << "" << endl;
 
-	cout << "// Step though a full hour of LCD updates (3600 in all)\n\n";
+	cout << ".section    .text    ; Everything in this file is pure code in the TEXT linker section" << endl;
 
-	cout << ".global update_lcd_1_hour" << endl;
-	cout << ".section    .text" << endl;
-	cout << "update_lcd_1_hour :" << endl;
+
 
 	cout << "" << endl;
 
+
+	cout << "// The SETUP macro loads all of the registers with the " << endl;
+	cout << "// with some values that make it faster to update the LCD " << endl;
+	cout << "// It is defined as a macro because we need to run it both" << endl;
+	cout << "// on normal entry to update_lcd_1_hour but also on entry" << endl;
+	cout << "// on entry to update_lcd_1_hour_start_at. We could make it" << endl;
+	cout << "// a subrotine but then we would have the overhead of call/ret" << endl;
+	cout << "// everytime it runs (once per hour) for the entire life of the product." << endl;
+	cout << "// Since we have plenty of flash, a macro works well becuase we " << endl;
+	cout << "// can just repeat teh code whereever we need it. " << endl;
+	cout << "// This macro does push stuff to the stack" << endl;
+	cout << "// This macro does not touch Z (r31:r30)" << endl;
+
+	cout << ".MACRO SETUP_CACHE_REGS" << endl;
 
 	printblankline();
 	printcomment("First we will load up the some available XMEGA registers with the most commonly");
@@ -990,9 +1002,21 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		}
 
-
 	}
 
+	// This is a slight hack to always save Y, but I can not tell for sure
+	// how you can know for sure if C really needs the Y saved or not.
+
+	printcomment("Save Y registers since C uses them for the stack frame");
+	stack_manager.push(29);
+	stack_manager.push(28);
+	printblankline();
+
+	cout << ".ENDM\n\n";
+	cout << endl;
+
+	cout << ".MACRO SETUP_INDEX_REGS\n\n";
+	cout << endl;
 
 	// Remeber the ASM string will will output to store a AVR register to this LCD register
 	// This output string must have a %d in it it that will accept the XMEGA register number
@@ -1000,6 +1024,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 	printblankline();
 	printcomment("Next we will load up the indirect pointers to point to the top 3 LCD addresses");
 	printcomment("so we can get to those in 1 cycle with ST rather than 2 cycles for an STS");
+	printcomment("This macro does NOT alter the stack (important)");
 
 	string_buffer reg_access_asm_strings[LCD_REG_COUNT];
 	string_buffer reg_access_comment_strings[LCD_REG_COUNT];
@@ -1023,6 +1048,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		{ 'Z' ,  31 , 30 , false , 0 },
 	};
 
+
 	for (auto const& reg : sorted_lcd_regsisters) {
 
 		// See if any index registers are still available to alocate....
@@ -1042,10 +1068,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 				// so we need to save it. The stack_manager will remeber that we saved it and automatically
 				// restore it when we call popall(). 
 
-				printcomment("Save Y registers since C uses them for the stack frame");
-				stack_manager.push(first_free_index_reg->high_reg);
-				stack_manager.push(first_free_index_reg->low_reg);
-				printblankline();
+
 
 			}
 
@@ -1075,7 +1098,21 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		}
 
 	}
-	
+
+	cout << ".ENDM\n\n";
+	cout << endl;
+
+
+	cout << "// Actual function called from C to \n\n";
+	cout << "// step though a full hour of LCD updates (3600 in all)\n\n";
+	cout << endl;
+	cout << ".global update_lcd_1_hour" << endl;
+	cout << "update_lcd_1_hour :" << endl;
+	cout << "update_lcd_1_hour :" << endl;
+
+	printasm("SETUP_CACHE_REGS", "", "Setup all the cache registers just the way we like them before starting");
+	printasm("SETUP_INDEX_REGS", "", "Setup all the index registers just the way we like them before starting");
+
 	// Reset back to start
 	regs_now = initial_lcd_reg_state;
 
@@ -1092,8 +1129,13 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		int step_cycle_count = 0;		// How many cycles in this step? 
 
 		printblankline();
-		sprintf_s(comment_buffer, string_bufer_len, "---- Step %4d (%02d:%02d)", i , i/60 , i%60 );
-		printcomment(comment_buffer);
+
+		// Create a label for update_lcd_1_hour_starting_at() to jump into
+
+		sprintf_s(asm_buffer, string_bufer_len, "STEP_%04d:" , i );
+		sprintf_s(comment_buffer, string_bufer_len, "%02d:%02d", i/60 , i%60 );
+		printasm(asm_buffer, "", comment_buffer );	
+
 
 		lcd_reg_state regs_next = sequence_of_lcd_reg_states[i];
 
@@ -1212,6 +1254,126 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 
 	cout << endl; 
+	printasm("RET", "", "All done!");
+
+	// Now we emit a jump table that wil be used by update_lcd_1_hour_starting_at() to 
+	// jump to the correct step in the above sequence
+
+	cout << "" << endl;
+	cout << "// Step jump table\n\n";
+	cout << "// We need this table becuase the code length of each step is unpredicable\n\n";
+
+	cout << "" << endl;
+
+	cout << "STEP_JMP_TABLE:" << endl;
+
+
+	for (int i = 0; i < sequence_count; i++) {
+
+		sprintf_s(asm_buffer, string_bufer_len, "JMP STEP_%04d", i);
+		sprintf_s(comment_buffer, string_bufer_len, "%02d:%02d", i / 60, i % 60);
+		printasm(asm_buffer, "", comment_buffer);
+
+	}
+
+	cout << "" << endl;
+
+	cout << "// OK. This gets a bit complicated here" << endl;
+	cout << "// We need to set up all the registers before jumping to the current" << endl;
+	cout << "// step using the above jump table, and we have a macro" << endl;
+	cout << "// called SETUP that does that. We call that macro right before" << endl;
+	cout << "// returning (a way of doing an indirect jump without messing up"  << endl;
+	cout << "// any of the crefully set up registers" << endl;
+
+
+	// Now the update_lcd_1_hour_starting_at() function
+	// C will call us with the requested step in r25:r24
+	// We need to multiply by the size of a JMP instruction (4 bytes) to get our offset into the jump table
+	// and then add the base of the JUMP table to get the location to jump to
+	// and then save that to Z so we can do an IJUMP into the jump table
+
+	cout << "" << endl;
+
+	cout << "// Jump to a specific step where step 0 is 0000 and step 3599 is 5959" << endl;
+	cout << "// Starts at the requested step and returns after reaching step 3600" << endl;
+	cout << "// The requested step is displayed immediately" << endl;
+	cout << "// By convention, C passes us the u_int16 argument in r25:r24" << endl;
+
+	cout << "// extern void update_lcd_1_hour_starting_at(uint16_t step);" << endl;
+	cout << "" << endl;
+
+	cout << ".global update_lcd_1_hour_starting_at" << endl;
+	cout << "update_lcd_1_hour_starting_at:" << endl;
+	
+	cout << "" << endl;
+	cout << "// The passed index is a pointer into a table of jumps" << endl;
+	cout << "// Each jump is 4 bytes, so you'd think we would have to" << endl;
+	cout << "// multipule the index by 4... but on AVR you address program" << endl;
+	cout << "// memory by words, so we only need to double the index." << endl;
+	cout << "" << endl;
+
+	printasm("ADD r24,r24", "r24" , "" );
+	printasm("ADC r25,r25", "r25" , "Double the passed step index");
+
+	cout << "" << endl;
+	cout << "// Now r25:r4 has the offset into the jump table, so" << endl;
+	cout << "// now we need to add the base address using a nice trick from..." << endl;
+	cout << "// http://uzebox.org/wiki/Assembler_Tips##Indirect_Jump_Without_Z" << endl;
+	cout << "// ...although the code there is wrong!" << endl;
+	cout << "" << endl;
+
+	printasm("subi  r24, lo8(-(pm(STEP_JMP_TABLE)))", "r24", "");
+	printasm("sbci  r25, hi8(-(pm(STEP_JMP_TABLE)))", "r25", "Add the base address to the index");
+
+	printcomment("r25:r24 now points to address of the entry of the jump table for the requestesd step");
+
+	printasm("MOVW  r30, r24", "", "Move to r31:r30 for safe keeping while we set up cache registers");
+
+	printcomment("r31:r30 now points to address of the entry of the jump table for the requestesd step");
+
+	cout << endl;
+	cout << "// Now we set up the cache regs, which pushes stuff to the stack" << endl;
+	cout << "// Note that the SETUP_CACHE_REGS explicitly doesnot touch Z so our" << endl;
+	cout << "// calculated jump address will be preserved." << endl;
+
+	cout << endl;
+
+	printasm("SETUP_CACHE_REGS", "", "Setup all the cache registers just the way we like them before starting");
+
+	cout << endl;
+	cout << "// Ok, now all the cache regs are set up and we are almost ready to jump into the jump table." << endl;
+	cout << "// We push Z to the stack so we will be able to RET to it soon." << endl;
+	cout << endl;
+
+	printasm("push r30", "", "Save our jump table target address on");
+	printasm("push r31", "", "the stack so we can RET to it.");
+
+	cout << endl;
+	cout << "// It turns out that the XMEGAB3 needs THREE bytes on the stack for a return" << endl;
+	cout << "// even though it can never have more than 2 bytes worth of program memory." << endl;
+	cout << "// (dont ask how long it took to figure this out)" << endl;
+	cout << endl;
+
+
+	printasm("LDI  r30,0", "", "We need 3 bytes on the stack for a RET on XMEGAB3");
+	printasm("PUSH r30", "", "So push a silly 0");
+
+
+	printcomment("Now we include the code that sets up the index registers for what comes next");
+	printcomment("This does not mess up the stack so the jump address we just pushed will still be");
+	printcomment("there afterwards. It does clobber Z, but we've already saved it to the stack.");
+
+	cout << "" << endl;
+
+	printasm("SETUP_INDEX_REGS", "", "Setup all the index registers just the way we like them before starting");
+
+	printcomment("And finally we RET to the entry in the jump table that will start us");
+	printcomment("counting, and RET does not mess up any of the registers we just set up");
+
+	cout << "" << endl;
+
+	printasm("RET", "", "Setup all the registers just the way we like them before starting");
+
 	cout << ".end" << endl;
 
 }
