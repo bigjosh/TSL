@@ -329,6 +329,131 @@ Here are all the occurrences...
 
  OK, this last optimization saved us 15 cycles at 8Mhz over a 1 hour sequence. That adds up to a power savings of [5.20833333 × 10<sup>-8</sup> percent](https://www.google.com/search?ei=L5Z7XIz5HY-1_AaXsqU4&q=15+*+%281%2F%288Mhz%29%29+%2F+%28+1+hour+%29+in+percent&oq=15+*+%281%2F%288Mhz%29%29+%2F+%28+1+hour+%29+in+percent&gs_l=psy-ab.3..33i160.6737.7593..7746...0.0..0.71.478.7......0....1..gws-wiz.......0i71j33i299j33i10i160.x4a450ifR-Q). We can expect a TSL with this optimization to get an additional [16.54 seconds](https://www.google.com/search?ei=1JZ7XLzoJYu2ggevjLrIBA&q=%2815+*+%281%2F%288Mhz%29%29+%2F+%281+hour%29%29+*+%281000+years%29&oq=%2815+*+%281%2F%288Mhz%29%29+%2F+%281+hour%29%29+*+%281000+years%29&gs_l=psy-ab.3...1600.4886..5165...0.0..0.130.586.7j1......0....1..gws-wiz.......0i71j33i299j33i160j33i10i299j33i10i160.FUJ9Mi_3FJk) of battery life over a 1,000 year run time. I think it is time to go to bed! :)
 
+## Jump right in
+
+When the TSL starts after a battery change then we starts at whatever time the TSL should be showing (calculated from the internal clock - the trigger time).
+
+We need to make a way that we can start at any step in this 1 hour sequence so we can start at whatever time we need after a battery change. 
+
+To do this, you might think we could just jump to whatever the current time is... but remember that every updating in this sequence has an unpredictable number of instructions in it so how do we find the address of the one we want?
+
+We use a jump table! This is just a (very long) list of jumps - one for each of the 3600 steps in the sequence. Because each jump is the same size (4 bytes), we can just take the step number we want to start at, multiply by 4, and jump to that byte in the jump table (well, almost). 
+
+Here is what the top of the jump table looks like...
+
+    STEP_JMP_TABLE:
+    JMP STEP_0000; 00:00
+    JMP STEP_0001; 00:01
+    JMP STEP_0002; 00:02
+    JMP STEP_0003; 00:03
+    JMP STEP_0004; 00:04
+    JMP STEP_0005; 00:05
+    JMP STEP_0006; 00:06
+    
+
+...so we can just do something like `JMP STEP_JMP_TABLE+(step*4)` and start steppin off to Eden, yeay brother! 
+
+There are a few complications. First off, on the AVR the program memory is addressed in words rather than bytes, so we only have to double the step index before adding it to the base.
+
+But there is another problem. Remember that before we display the first `0000` on the LCD, we did a huge amount of work to get all the value and index Registers set up just the way we like them. We need to make sure these register are also set right when we jump to a step in the middle of the sequence. 
+
+To so this, we get tricky. We define the code that sets up the registers in 2 macros: `SETUP_CACHE_REGS` and `SETUP_INDEX_REGS`. When then include these macros in both the function that starts at step 0 and the one that starts at an step in the middle.
+
+Why not just have a single function that starts anyplace and call it with an index of 0 when we enter it normally at the top of every hour? Because it takes a lot of work to figure out all the jump table stuff, so we only ever want to do that once right after a batter change, and the rest of the time we want to efficiently jump directly to `0000` for every other of the 5 million or so other hours we will be running.
+
+So why do we need to break out the register setup into two macros? In order to do this fancy indirect jump to any step takes work (and registers). If we just loaded up all the registers and then decided to figure out the jump stuff, our figuring out the jump stuff will clobber some of those carefully set registers!   
+
+So why don't we just figure out the indirect jump address first and then set up all the register and then only do the jump after we do all the registers? Well, the typical way you do an indirect jump on AVR is to load the address you want to jump to into the Z registers and then execute the `ijmp` instruction. But we (very productively!) use the Z register as one of our precious 3 indexing registers! I guess we could load the jump address into Z before we set up the index registers, and then just not use the Z as an index so Z would still have the jump address when it was time to do the actual jump... but that would be horrible! We really need that Z!
+
+So instead we use a trick to do an indirect call that does not need the Z. Instead, we trick the AVR to jump to the address we want by pushing the address onto the stack and then doing a return command! This way we can Still use the Z for indexing our LCD registers. 
+
+Ok, so why don't we can just computer the jump address and push it onto the stack before we load up all our registers and then to the return? Because in the process of loading up our register we push stuff on the stack! This means that if we then did a return after all the registers were loaded, then we'd end up jumping to some random place just based on the last few values we happened to have stored on the stack. Yuck!
+
+The way we escape form this dilemma is to...
+
+1. Compute the jump address using whatever registers we want
+2. Save the jump address into the Z index register
+3. Load up all the value registers (which does some pushing)
+4. Push the Z index register (which still has the jump address) on the stack
+5. Load up the index registers with their special values (which clobbers the jump address in Z, but that's OK because it is already on the stack)
+6. Do our `return` to jump to the computed jump address!
+ 
+Phew! We are done! Yeay!
+
+No so fast... there is one more wrinkle! It turns out that our XMEGA actually pops 3 bytes off the stack when it executes a return, even though the most memory this part can have is 128K - which would always fit into 2 bytes (remember that program memory is addressed in words).
+
+Knowing this (which took me a fricken hour to figure out, we can just push an extra `0` on the stack after our jump address and that works.  Here is the resulting jump address calculate and push code...
+
+
+```
+.global update_lcd_1_hour_starting_at
+update_lcd_1_hour_starting_at:
+
+// The passed index is a pointer into a table of jumps
+// Each jump is 4 bytes, so you'd think we would have to
+// multipule the index by 4... but on AVR you address program
+// memory by words, so we only need to double the index.
+
+    ADD r24,r24          
+    ADC r25,r25              ; Double the passed step index
+
+// Now r25:r4 has the offset into the jump table, so
+// now we need to add the base address using a nice trick from...
+// http://uzebox.org/wiki/Assembler_Tips##Indirect_Jump_Without_Z
+// ...although the code there is wrong!
+
+    subi  r24, lo8(-(pm(STEP_JMP_TABLE))) 
+    sbci  r25, hi8(-(pm(STEP_JMP_TABLE)))     ; Add the base address to the index
+    // r25:r24 now points to address of the entry of the jump table for the requestesd step
+    MOVW  r30, r24           ; Move to r31:r30 for safe keeping while we set up cache registers
+    // r31:r30 now points to address of the entry of the jump table for the requestesd step
+
+// Now we set up the cache regs, which pushes stuff to the stack
+// Note that the SETUP_CACHE_REGS explicitly doesnot touch Z so our
+// calculated jump address will be preserved.
+
+    SETUP_CACHE_REGS         ; Setup all the cache registers just the way we like them before starting
+
+// Ok, now all the cache regs are set up and we are almost ready to jump into the jump table.
+// We push Z to the stack so we will be able to RET to it soon.
+
+    push r30                 ; Save our jump table target address on
+    push r31                 ; the stack so we can RET to it.
+
+// It turns out that the XMEGAB3 needs THREE bytes on the stack for a return
+// even though it can never have more than 2 bytes worth of program memory.
+// (dont ask how long it took to figure this out)
+
+    LDI  r30,0               ; We need 3 bytes on the stack for a RET on XMEGAB3
+    PUSH r30                 ; So push a silly 0
+    // Now we include the code that sets up the index registers for what comes next
+    // This does not mess up the stack so the jump address we just pushed will still be
+    // there afterwards. It does clobber Z, but we've already saved it to the stack.
+
+    SETUP_INDEX_REGS         ; Setup all the index registers just the way we like them before starting
+    // And finally we RET to the entry in the jump table that will start us
+    // counting, and RET does not mess up any of the registers we just set up
+
+    RET                      ; Setup all the registers just the way we like them before starting
+.end
+```
+
+Notes:
+
+`pm()` gets the program memory adjusted adress (converts from bytes to words)
+`hi8()` and `lo8()` get the high and low 8 bytes of a 16 bit word.
+
+Ok, now we are really done! I promise! Thanks for sticking in there with me, I think the results are worth it!
+
+### Results
+| Optimization | Total Display Update Cycles |
+| - | -: |
+| None | 43,200 |
+| Skip redundant stores |  28,377 |
+| Use 3 index registers |  20,595 |
+| Use cache registers | |  15,737 |
+| Suppress redundant working register loads | 15,715 |
+
 ### Even better
 
 If I was cool, I would have used [graph coloring](https://en.wikipedia.org/wiki/Register_allocation#Graph-coloring_allocation) to optimally allocate these registers rather than static allocation. Unfortunately I am lazy and this would be much more work for probably an unnoticeable increase in battery life. Still, if you are reading this then you should probably implement this and send me a pull request with your awesome code! :)  
@@ -337,12 +462,5 @@ While you are at it, we could also optimize the order of assignments in each ste
 
 Keep in mind that these further optimizations will have diminishing returns beyond the extraordinary ones already in place. You will be lucky to find more than an additional 1 second of battery life over a 100 year runtime, so just know that you are doing it for the love of the cycles! 
 
-# Results
-| Optimization | Total Display Update Cycles |
-| - | -: |
-| None | 43,200 |
-| Skip redundant stores |  28,377 |
-| Use 3 index registers |  20,595 |
-| Use cache registers | |  15,737 |
-| Suppress redundant working register loads | 15,715 |
+
 
