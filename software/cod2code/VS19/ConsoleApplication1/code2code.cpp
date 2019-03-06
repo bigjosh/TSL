@@ -537,9 +537,16 @@ using namespace std;
 
 // A snapshot of the LCD regs
 
-typedef struct {
-	int regs[LCD_REG_COUNT];		// You can use -1 to mean "not known" since it will always be different than a real value
-} lcd_reg_state;
+struct reg {
+
+	bool touched;			// Has it be modified?
+	uint8_t value;			// Current value
+
+};
+
+struct lcd_reg_state {
+	reg regs[LCD_REG_COUNT];		// You can use -1 to mean "not known" since it will always be different than a real value
+};
 
 #define REG_VALUE_UNKNOWN (-1)
 
@@ -716,12 +723,12 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 			// Only care if (1) new value is set, and new value is different from old value
 			// note that this will catch a change from unknown to anything else
 
-			if (regs_next.regs[r] != REG_VALUE_UNKNOWN && regs_now.regs[r] != regs_next.regs[r]) {		
+			if (regs_next.regs[r].touched && regs_now.regs[r].value != regs_next.regs[r].value ) {		
 
 				// Count the access to this register
 				lcd_reg_access_top_finder.increment(r);
 
-				lcd_load_values_access_top_finder.increment(regs_next.regs[r]);
+				lcd_load_values_access_top_finder.increment(regs_next.regs[r].value);
 
 				regs_now.regs[r] = regs_next.regs[r];
 
@@ -787,9 +794,11 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 	cout << "// This macro does push stuff to the stack" << endl;
 	cout << "// This macro does not touch Z (r31:r30)" << endl;
 
+	printblankline();
+
+
 	cout << ".MACRO SETUP_CACHE_REGS" << endl;
 
-	printblankline();
 	printcomment("First we will load up the some available XMEGA registers with the most commonly");
 	printcomment("stored values so we can save an LDI to load them again.");
 	printcomment("We do this first becuase this will naturally PUSH the registers used");
@@ -803,6 +812,9 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		bool ldi_target;	// Can we directly LDI to this register?
 
 	};
+
+
+	// Problems	1711 1717 = step 1031
 
 	const avr_reg_type avr_regs[32] = {
 
@@ -1010,19 +1022,16 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 	printcomment("Save Y registers since C uses them for the stack frame");
 	stack_manager.push(29);
 	stack_manager.push(28);
-	printblankline();
 
-	cout << ".ENDM\n\n";
+	cout << ".ENDM" << endl;
 	cout << endl;
 
-	cout << ".MACRO SETUP_INDEX_REGS\n\n";
-	cout << endl;
+	cout << ".MACRO SETUP_INDEX_REGS" << endl;
 
 	// Remeber the ASM string will will output to store a AVR register to this LCD register
 	// This output string must have a %d in it it that will accept the XMEGA register number
 
-	printblankline();
-	printcomment("Next we will load up the indirect pointers to point to the top 3 LCD addresses");
+	printcomment("This macro will load up the indirect pointers to point to the top 3 LCD addresses");
 	printcomment("so we can get to those in 1 cycle with ST rather than 2 cycles for an STS");
 	printcomment("This macro does NOT alter the stack (important)");
 
@@ -1099,15 +1108,32 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	}
 
-	cout << ".ENDM\n\n";
+	cout << ".ENDM";
+	cout << endl;	
+
+	printblankline();
+
+	cout << ".MACRO PAUSE" << endl;
+	printcomment("This macro will pause until the next second starts.");
+	printcomment("It has hardcoded the VPORT and bit for the FOUT pin.");
+	printcomment("Someday we can shrinnk this down to just a SLEEP when");
+	printcomment("PCB V6 comes out.");
+	printcomment("Interlock on a high-to-low then low-to-high transition on FOUT (1 second)");
+	printasm("SLEEP", "", "Wait for any edge interrupt from RX8900");
+	printasm("SBIC 0x1a, 2", "", "Skip to next phase if !(VPORT2.IN & 0x04)");
+	printasm("RJMP . + 6", "", "...or go back to sleep and wait again");
+	printasm("SLEEP", "", "Wait for any edge interrupt from RX8900");
+	printasm("SBIS 0x1a, 2", "", "Skip to next phase if (VPORT2.IN & 0x04)");
+	printasm("RJMP . + 6", "", "...or go back to sleep and wait again");
+	cout << ".ENDM";
 	cout << endl;
 
+	printblankline();
 
 	cout << "// Actual function called from C to \n\n";
 	cout << "// step though a full hour of LCD updates (3600 in all)\n\n";
 	cout << endl;
 	cout << ".global update_lcd_1_hour" << endl;
-	cout << "update_lcd_1_hour :" << endl;
 	cout << "update_lcd_1_hour :" << endl;
 
 	printasm("SETUP_CACHE_REGS", "", "Setup all the cache registers just the way we like them before starting");
@@ -1128,7 +1154,18 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		int step_cycle_count = 0;		// How many cycles in this step? 
 
+		lcd_reg_state regs_next = sequence_of_lcd_reg_states[i];
+
 		printblankline();
+
+		// Print the new LCD regs values for debugging
+
+		printf("// STEP:%4d - REGS:", i);
+		for (uint8_t r = 0; r < LCD_REG_COUNT; r++) {
+			printf("%02d:%3d ", r, regs_next.regs[r] );
+		}
+		printf("\n");
+
 
 		// Create a label for update_lcd_1_hour_starting_at() to jump into
 
@@ -1137,16 +1174,14 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		printasm(asm_buffer, "", comment_buffer );	
 
 
-		lcd_reg_state regs_next = sequence_of_lcd_reg_states[i];
-
 		for (uint8_t r = 0; r < LCD_REG_COUNT; r++) {
 
 			// Only care if (1) new value is set, and new value is different from old value
 			// note that this will catch a change from unknown to anything else
 
-			if (regs_next.regs[r] != REG_VALUE_UNKNOWN && regs_now.regs[r] != regs_next.regs[r] ) {
+			if (regs_next.regs[r].touched && regs_now.regs[r].value != regs_next.regs[r].value ) {
 
-				int new_value = regs_next.regs[r];		// This is the value we want to store 
+				int new_value = regs_next.regs[r].value;		// This is the value we want to store 
 
 				// Look and see if we have this value in a cache register...
 
@@ -1227,14 +1262,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		// NOTE THAT THIS HAS A HARDCODED ASSUMPTION THAT FOUT IS ON VPORT2 PIN 2!!!!
 
 		printblankline();
-		printcomment("Interlock on a high-to-low then low-to-high transition on FOUT (1 second)");
-		printasm("SLEEP"		, "", "Wait for any edge interrupt from RX8900");
-		printasm("SBIC 0x1a, 2", "", "Skip to next phase if !(VPORT2.IN & 0x04)");
-		printasm("RJMP . + 6"	, "", "...or go back to sleep and wait again");
-		printasm("SLEEP"		, "", "Wait for any edge interrupt from RX8900");
-		printasm("SBIS 0x1a, 2", "", "Skip to next phase if (VPORT2.IN & 0x04)");
-		printasm("RJMP . + 6"	, "", "...or go back to sleep and wait again");
-
+		printasm("PAUSE"		, "", "Sleep until next second trigger from RX8900");
 
 		/*
 		printf("    asm(\"sleep\");  //\n");
@@ -1386,23 +1414,18 @@ void setlcdregsfordigit(lcd_reg_state * lcd_regs, uint8_t place, uint8_t n) {
 	// Step though all the pixels in the current digit and see which ones are lit
 	for (uint8_t p = 0; p < 7; p++) {
 
+		uint8_t target_reg = LCD_REG_OFF(digitmap[place][p].com, digitmap[place][p].seg);
+
+		// We touched this pixel in sewtting this digit. Doesn't matter if it is on or off since
+		// it could have been on before we enetered here, and off now so we need to set it back to 0. 
+
+		lcd_regs->regs[target_reg].touched = true;
+
 		if (lcd_font_digits[n] & (1 << p)) {
 
 			// This pixel is lit, so set the bit in the show regs
 
-			uint8_t target_reg = LCD_REG_OFF(digitmap[place][p].com, digitmap[place][p].seg);
-
-			// If we have never set this register before, then set it to zero
-			// we do this so we only need to set bits for pixels that should be on
-			// (0 in the reg means all pixels off)
-
-			if (lcd_regs->regs[target_reg] == REG_VALUE_UNKNOWN) {
-
-				lcd_regs->regs[target_reg] = 0; 
-
-			}
-
-			lcd_regs->regs[target_reg] |= (1 << LCD_REG_BIT(digitmap[place][p].com, digitmap[place][p].seg));
+			lcd_regs->regs[target_reg].value |= (1 << LCD_REG_BIT(digitmap[place][p].com, digitmap[place][p].seg));
 
 			//printf("set place=%d n=%d p=%d\r\n", place, n, p);
 
@@ -1419,30 +1442,24 @@ void setlcdregsfordigit(lcd_reg_state * lcd_regs, uint8_t place, uint8_t n) {
 
 void lcdEmit1hourCode() {
 
-	// All regs set to REG_VALUE_UNKNOWN
+	// All regs set to untouched, value=0
 
-	lcd_reg_state regs_unknown;
-
-	// Initialize
-	for (auto  &reg : regs_unknown.regs) {
-		reg = REG_VALUE_UNKNOWN;
-	}
-
-
-	lcd_reg_state regs_zero;
+	lcd_reg_state regs_untouched;
 
 	// Initialize
-	for (auto& reg : regs_zero.regs) {
-		reg = 0;
+	for (auto  &reg : regs_untouched.regs) {
+		reg.touched = false;
+		reg.value = 0;
 	}
 
-
-	lcd_reg_state regs_init = regs_unknown;		// We do't know any of the registers when we start
+	lcd_reg_state regs_init = regs_untouched;		// We do't know any of the registers when we start
 
 	lcd_reg_state reg_steps[60 * 60];			// 60 seconds * 60 minutes = 1 hour
 
 	int step = 0;
 
+	cout << endl;
+	cout << "// Compute steps 0000 - 5959 " << endl;
 
 	for (uint8_t m = 0; m < 60; m++) {
 
@@ -1455,7 +1472,7 @@ void lcdEmit1hourCode() {
 
 			// This way any regs that are not touched will stay unknown.
 
-			lcd_reg_state lcd_regs = regs_unknown;
+			lcd_reg_state lcd_regs = regs_untouched;
 
 			setlcdregsfordigit(&lcd_regs, 0, s % 10);
 			setlcdregsfordigit(&lcd_regs, 1, s / 10);
@@ -1464,10 +1481,34 @@ void lcdEmit1hourCode() {
 
 			// Ok, now the shadow_regs_next have the values that should be in the LCD registers when we are done.
 
+		// Print the new LCD regs values for debugging
+
+			printf("// STEP:%4d (%02d:%02d) - BITS:" , m*60+s , m, s );
+			for (uint8_t r = 0; r < LCD_REG_COUNT; r++) {
+
+				if (lcd_regs.regs[r].touched) {
+					for (int b = 0; b < 8; b++) {
+
+						printf("%c", lcd_regs.regs[r].value & (1 << (7 - b)) ? '1' : '0');
+					}
+					printf(" ");
+					//printf("%02d:%3d ", r, lcd_regs.regs[r]);
+				}
+				else {
+					// Not touched
+					printf("--------");
+				}
+			}
+			printf("\n");
+
+
 			reg_steps[step++] = lcd_regs;
 		}
 
 	}
+
+	cout << endl;
+
 
 	//printf("step=%d\r\n", step);
 

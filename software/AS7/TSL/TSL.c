@@ -2231,6 +2231,8 @@ uint24_t glitches  __attribute__ ((section (".noinit")));
 uint8_t last_fout __attribute__ ((section (".noinit")));
 
 
+// For testing if static electricity can cause a glitch on the FOUT line.
+
 void fout_glitch_tester() {
 
     digitShow( 6 , seconds   );
@@ -2587,7 +2589,7 @@ int main(void)
     */
     
     #warning
-    update_lcd_1_hour_starting_at(4);
+    update_lcd_1_hour_starting_at(1020);
     update_lcd_1_hour_starting_at(10);    
     update_lcd_1_hour();
     clearLCD();
