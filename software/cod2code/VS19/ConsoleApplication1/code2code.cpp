@@ -752,9 +752,13 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	*/
 
-	cout << "// Most accessed LCD registers: " << endl;
 
 	auto sorted_lcd_regsisters = lcd_reg_access_top_finder.sorted_by_count_decending();
+
+	/*
+
+	cout << "// Most accessed LCD registers: " << endl;
+
 
 	for (auto const& reg : sorted_lcd_regsisters) {
 
@@ -765,13 +769,19 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 	cout << "" << endl;
 	cout << "// Most common values saved to LCD registers: " << endl;
 
+	*/
+
 	auto sorted_lcd_values = lcd_load_values_access_top_finder.sorted_by_count_decending();
+
+	/*
 
 	for (auto const& reg : sorted_lcd_values) {
 
 		printf("//    Value: %02x Count: %3d\n", reg.key, reg.count);
 
 	}
+
+	*/
 
 	cout << "" << endl;
 
@@ -1158,6 +1168,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		printblankline();
 
+		/*
 		// Print the new LCD regs values for debugging
 
 		printf("// STEP:%4d - REGS:", i);
@@ -1165,7 +1176,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 			printf("%02d:%3d ", r, regs_next.regs[r] );
 		}
 		printf("\n");
-
+		*/
 
 		// Create a label for update_lcd_1_hour_starting_at() to jump into
 
@@ -1215,8 +1226,8 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 						sprintf_s(comment_buffer, string_bufer_len, "Skipped redundant load of value %3d into working register. Wow.", new_value);
 						printcomment(comment_buffer);
 
-						sprintf_s(comment_buffer, string_bufer_len, "Value %3d in LCD register %02d at Step %4d at %02d:%02d", new_value , r , i, i / 60, i % 60);
-						printcomment(comment_buffer);
+						//sprintf_s(comment_buffer, string_bufer_len, "Value %3d already in working register at step %4d at %02d:%02d. Wow.", new_value , i , i/60 , i% 60 );
+						//printcomment(comment_buffer);
 
 					} else {
 
@@ -1481,7 +1492,10 @@ void lcdEmit1hourCode() {
 
 			// Ok, now the shadow_regs_next have the values that should be in the LCD registers when we are done.
 
-		// Print the new LCD regs values for debugging
+
+			/*
+
+			// Print the new LCD regs values for debugging
 
 			printf("// STEP:%4d (%02d:%02d) - BITS:" , m*60+s , m, s );
 			for (uint8_t r = 0; r < LCD_REG_COUNT; r++) {
@@ -1500,6 +1514,8 @@ void lcdEmit1hourCode() {
 				}
 			}
 			printf("\n");
+
+			*/
 
 
 			reg_steps[step++] = lcd_regs;

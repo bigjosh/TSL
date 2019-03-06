@@ -275,59 +275,59 @@ This is a pretty esoteric case. We would need the same uncached value to get con
 
 Does it ever happen?....
 
-Wholey crap! Wow! It actually happens 15 times!!! Are you surprised? 
+Wholey crap! Wow! It actually happens 24 times!!! Are you surprised? 
 
-The first time is at 11:31... 
+The first time is at 11:11... 
 
-    // ---- Step  691 (11:31)
-    // Found value 186 in cache register
-    ST Y,r11                 ; 2868 accesses to R02
-    LDI r18,0x20             ; Load uncached value into working register
-    ST X,r18                 ; 2874 accesses to R06
+    STEP_0671:               ; 11:11
+    // Found value 170 in cache register
+    ST Y,r19                 ; 2868 accesses to R02
+    LDI r18,0x00             ; Load uncached value into working register
+    ST X,r18                 ; 2880 accesses to R06
     // Found value 170 in cache register
     ST Z,r19                 ; 2040 accesses to R10
-    // Skipped redundant load of value  32 into working register. Wow.
-    // Value  32 in LCD register 14 at Step  691 at 11:31
+    // Skipped redundant load of value   0 into working register. Wow.
     STS 0x0D1E,r18           ; direct store to LCD register 14
     // --- Cycles in this step: 6
 
-Then again at 11:33...
+Then again at 11:13 (the 128 was loaded into r18 at 11:12)...
 
-    // ---- Step  693 (11:33)
-    // Found value 250 in cache register
-    ST Y,r03                 ; 2868 accesses to R02
-    // Skipped redundant load of value 160 into working register. Wow.
-    // Value 160 in LCD register 06 at Step  693 at 11:33
-    ST X,r18                 ; 2874 accesses to R06
+    STEP_0673:               ; 11:13
+    // Found value 234 in cache register
+    ST Y,r23                 ; 2868 accesses to R02
+    // Skipped redundant load of value 128 into working register. Wow.
+    ST X,r18                 ; 2880 accesses to R06
     // --- Cycles in this step: 2
-
 
 Here are all the occurrences...
 
-    // Value  32 in LCD register 14 at Step  691 at 11:31
-    // Value 160 in LCD register 06 at Step  693 at 11:33
-    // Value 160 in LCD register 06 at Step  713 at 11:53
-    // Value   8 in LCD register 14 at Step  791 at 13:11
-    // Value 232 in LCD register 06 at Step  818 at 13:38
-    // Value 232 in LCD register 06 at Step  828 at 13:48
-    // Value 232 in LCD register 06 at Step  878 at 14:38
-    // Value 232 in LCD register 06 at Step  888 at 14:48
-    // Value   8 in LCD register 14 at Step 1151 at 19:11
-    // Value 232 in LCD register 06 at Step 1178 at 19:38
-    // Value 232 in LCD register 06 at Step 1188 at 19:48
-    // Value   2 in LCD register 14 at Step 1871 at 31:11
-    // Value 130 in LCD register 06 at Step 1873 at 31:13
-    // Value  34 in LCD register 14 at Step 1891 at 31:31
-    // Value 202 in LCD register 06 at Step 1998 at 33:18
-    // Value 106 in LCD register 06 at Step 2020 at 33:40
-    // Value 202 in LCD register 06 at Step 2058 at 34:18
-    // Value 202 in LCD register 06 at Step 2358 at 39:18
-    // Value 202 in LCD register 06 at Step 2598 at 43:18
-    // Value 202 in LCD register 06 at Step 2658 at 44:18
-    // Value 202 in LCD register 06 at Step 2958 at 49:18
-    // Value 130 in LCD register 06 at Step 3073 at 51:13
+    // Value   0 already in working register at step  671 at 11:11. Wow.
+    // Value 128 already in working register at step  673 at 11:13. Wow.
+    // Value  32 already in working register at step  691 at 11:31. Wow.
+    // Value 160 already in working register at step  693 at 11:33. Wow.
+    // Value 160 already in working register at step  713 at 11:53. Wow.
+    // Value   8 already in working register at step  791 at 13:11. Wow.
+    // Value 232 already in working register at step  818 at 13:38. Wow.
+    // Value 232 already in working register at step  828 at 13:48. Wow.
+    // Value 232 already in working register at step  878 at 14:38. Wow.
+    // Value 232 already in working register at step  888 at 14:48. Wow.
+    // Value   8 already in working register at step 1151 at 19:11. Wow.
+    // Value 232 already in working register at step 1178 at 19:38. Wow.
+    // Value 232 already in working register at step 1188 at 19:48. Wow.
+    // Value   2 already in working register at step 1871 at 31:11. Wow.
+    // Value 130 already in working register at step 1873 at 31:13. Wow.
+    // Value  34 already in working register at step 1891 at 31:31. Wow.
+    // Value 202 already in working register at step 1998 at 33:18. Wow.
+    // Value 106 already in working register at step 2020 at 33:40. Wow.
+    // Value 202 already in working register at step 2058 at 34:18. Wow.
+    // Value 202 already in working register at step 2358 at 39:18. Wow.
+    // Value 202 already in working register at step 2598 at 43:18. Wow.
+    // Value 202 already in working register at step 2658 at 44:18. Wow.
+    // Value 202 already in working register at step 2958 at 49:18. Wow.
+    // Value 130 already in working register at step 3073 at 51:13. Wow.
 
- OK, this last optimization saved us 15 cycles at 8Mhz over a 1 hour sequence. That adds up to a power savings of [5.20833333 × 10<sup>-8</sup> percent](https://www.google.com/search?ei=L5Z7XIz5HY-1_AaXsqU4&q=15+*+%281%2F%288Mhz%29%29+%2F+%28+1+hour+%29+in+percent&oq=15+*+%281%2F%288Mhz%29%29+%2F+%28+1+hour+%29+in+percent&gs_l=psy-ab.3..33i160.6737.7593..7746...0.0..0.71.478.7......0....1..gws-wiz.......0i71j33i299j33i10i160.x4a450ifR-Q). We can expect a TSL with this optimization to get an additional [16.54 seconds](https://www.google.com/search?ei=1JZ7XLzoJYu2ggevjLrIBA&q=%2815+*+%281%2F%288Mhz%29%29+%2F+%281+hour%29%29+*+%281000+years%29&oq=%2815+*+%281%2F%288Mhz%29%29+%2F+%281+hour%29%29+*+%281000+years%29&gs_l=psy-ab.3...1600.4886..5165...0.0..0.130.586.7j1......0....1..gws-wiz.......0i71j33i299j33i160j33i10i299j33i10i160.FUJ9Mi_3FJk) of battery life over a 1,000 year run time. I think it is time to go to bed! :)
+
+ OK, this last optimization saved us 24 cycles at 8Mhz over a 1 hour sequence. That adds up to a power savings of less than [one ten millionth of a percent](https://www.google.com/search?ei=L5Z7XIz5HY-1_AaXsqU4&q=24+*+%281%2F%288Mhz%29%29+%2F+%28+1+hour+%29+in+percent&oq=15+*+%281%2F%288Mhz%29%29+%2F+%28+1+hour+%29+in+percent&gs_l=psy-ab.3..33i160.6737.7593..7746...0.0..0.71.478.7......0....1..gws-wiz.......0i71j33i299j33i10i160.x4a450ifR-Q). We can expect a TSL with this optimization to get an additional [26.29 seconds](https://www.google.com/search?ei=1JZ7XLzoJYu2ggevjLrIBA&q=%2815+*+%281%2F%288Mhz%29%29+%2F+%281+hour%29%29+*+%281000+years%29&oq=%2815+*+%281%2F%288Mhz%29%29+%2F+%281+hour%29%29+*+%281000+years%29&gs_l=psy-ab.3...1600.4886..5165...0.0..0.130.586.7j1......0....1..gws-wiz.......0i71j33i299j33i160j33i10i299j33i10i160.FUJ9Mi_3FJk) of battery life over a 1,000 year run time. I think it is time to go to bed! :)
 
 ## Jump right in
 
@@ -451,8 +451,8 @@ Ok, now we are really done! I promise! Thanks for sticking in there with me, I t
 | None | 43,200 |
 | Skip redundant stores |  28,377 |
 | Use 3 index registers |  20,595 |
-| Use cache registers | |  15,737 |
-| Suppress redundant working register loads | 15,715 |
+| Use cache registers | |  15,845 |
+| Suppress redundant working register loads | 15,821 |
 
 ### Even better
 
@@ -460,7 +460,4 @@ If I was cool, I would have used [graph coloring](https://en.wikipedia.org/wiki/
 
 While you are at it, we could also optimize the order of assignments in each step to maximize the number of times that a register loaded in one step can be reused in the next step. I'm sure there is a general solution to this, but a brute force approach could just try all 4*4 orders and keep track of the one that has the lowest number of loads and use that one.
 
-Keep in mind that these further optimizations will have diminishing returns beyond the extraordinary ones already in place. You will be lucky to find more than an additional 1 second of battery life over a 100 year runtime, so just know that you are doing it for the love of the cycles! 
-
-
-
+Keep in mind that these further optimizations will have diminishing returns beyond the extraordinary ones already in place. You will be lucky to find more than an additional 1 second of battery life over a 100 year run-time, so just know that you are doing it for the love of the cycles! 
