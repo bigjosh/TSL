@@ -1179,6 +1179,13 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		printf("\n");
 		*/
 
+		// Create a label for the correspinding start step to jump into
+		// afdter it has set up all the LCD registers and the working register right
+
+		sprintf_s(asm_buffer, string_bufer_len, "STEP_%04d:", i);
+		sprintf_s(comment_buffer, string_bufer_len, "%02d:%02d", i / 60, i % 60);
+		printasm(asm_buffer, "", comment_buffer);
+
 		for (uint8_t r = 0; r < LCD_REG_COUNT; r++) {
 
 			// Only care if (1) new value is set, and new value is different from old value
@@ -1256,13 +1263,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		total_cycle_count += step_cycle_count;
 
-		// Create a label for the correspinding start step to jump into
-		// This comes right before the PUASE so the start step can display the 
-		// current step and jump jump and pause until thenext step is Ready to go. 
 
-		sprintf_s(asm_buffer, string_bufer_len, "STEP_PAUSE_%04d:", i);
-		sprintf_s(comment_buffer, string_bufer_len, "%02d:%02d", i / 60, i % 60);
-		printasm(asm_buffer, "", comment_buffer);
 
 
 
@@ -1416,7 +1417,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		// Now jump into the main sequence where we belong right before the PUASE
 		// From there will will pick up and eveything will be hunky dory
 
-		sprintf_s(asm_buffer, string_bufer_len, "JMP STEP_PAUSE_%04d", i);
+		sprintf_s(asm_buffer, string_bufer_len, "JMP STEP_%04d", i);
 		sprintf_s(comment_buffer, string_bufer_len, "%02d:%02d", i / 60, i % 60);
 		printasm(asm_buffer, "", comment_buffer);
 
@@ -1440,7 +1441,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	for (int i = 0; i < sequence_count; i++) {
 
-		sprintf_s(asm_buffer, string_bufer_len, "JMP STEP_START_%04d", i);
+		sprintf_s(asm_buffer, string_bufer_len, "JMP STEP_SETUP_%04d", i);
 		sprintf_s(comment_buffer, string_bufer_len, "%02d:%02d", i / 60, i % 60);
 		printasm(asm_buffer, "", comment_buffer);
 
@@ -1450,8 +1451,8 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	cout << "// OK. This gets a bit complicated here" << endl;
 	cout << "// We need to set up all the registers before jumping to the current" << endl;
-	cout << "// step using the above jump table, and we have a macro" << endl;
-	cout << "// called SETUP that does that. We call that macro right before" << endl;
+	cout << "// step using the above jump table, and we have macros" << endl;
+	cout << "// called SETUP_* that do that. We call that macro right before" << endl;
 	cout << "// returning (a way of doing an indirect jump without messing up"  << endl;
 	cout << "// any of the crefully set up registers" << endl;
 
@@ -1503,7 +1504,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	cout << endl;
 	cout << "// Now we set up the cache regs, which pushes stuff to the stack" << endl;
-	cout << "// Note that the SETUP_CACHE_REGS explicitly doesnot touch Z so our" << endl;
+	cout << "// Note that the SETUP_CACHE_REGS explicitly do not touch Z so our" << endl;
 	cout << "// calculated jump address will be preserved." << endl;
 
 	cout << endl;
