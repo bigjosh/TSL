@@ -792,7 +792,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 	cout << "" << endl;
 
 
-	cout << "// The SETUP macro loads all of the registers with the " << endl;
+	cout << "// The SETUP macro loads all of the registers with " << endl;
 	cout << "// with some values that make it faster to update the LCD " << endl;
 	cout << "// It is defined as a macro because we need to run it both" << endl;
 	cout << "// on normal entry to update_lcd_1_hour but also on entry" << endl;
@@ -1092,7 +1092,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 			}
 
 			sprintf_s( asm_buffer , string_bufer_len, "LDI r%02d,0x%2.02x" , first_free_index_reg->high_reg,  LCD_REGS_BASE_HIGH );		// Store to index reg the location of the LCD register
-			sprintf_s( comment_buffer, string_bufer_len, "Store high byte of address of LCD reg %02d to %c", reg.key , first_free_index_reg->name  );		// Store to index reg Z the location of the LCD register
+			sprintf_s( comment_buffer, string_bufer_len, "Store high byte of address of LCD reg %02d to %c (%4d accesses)", reg.key , first_free_index_reg->name , reg.count);		// Store to index reg Z the location of the LCD register
 			sprintf_s(clobber_buffer, string_bufer_len, "r%02d", first_free_index_reg->high_reg);		// Store to index reg the location of the LCD register
 			printasm(asm_buffer, clobber_buffer , comment_buffer);	// Apparently clobbers filed doesnt know about *H register name
 
@@ -1102,7 +1102,7 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 			printasm(asm_buffer, clobber_buffer, comment_buffer);	// Apparently clobbers filed doesnt know about *H register name
 
 			sprintf_s( reg_access_asm_strings[reg.key] , string_bufer_len, "ST %c,r%%02d" , first_free_index_reg->name );		// Store to index reg X location
-			sprintf_s( reg_access_comment_strings[reg.key], string_bufer_len, "%d accesses to R%02d" , reg.count , reg.key );		// Store to index reg X location
+			sprintf_s( reg_access_comment_strings[reg.key], string_bufer_len, "%c indirect access to LCD reg %02d" , first_free_index_reg->name, reg.key );		// Store to index reg X location
 			reg_access_cyclecount[reg.key] = 1; // ST only 1 cycle!
 
 			first_free_index_reg->assigned = true;
@@ -1167,7 +1167,8 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		lcd_reg_state regs_next = sequence_of_lcd_reg_states[i];
 
 		printblankline();
-
+		sprintf_s(comment_buffer, string_bufer_len, "----- Step %04d %02d:%02d", i , i / 60, i % 60);
+		printcomment(comment_buffer);
 		/*
 		// Print the new LCD regs values for debugging
 
@@ -1177,13 +1178,6 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 		}
 		printf("\n");
 		*/
-
-		// Create a label for update_lcd_1_hour_starting_at() to jump into
-
-		sprintf_s(asm_buffer, string_bufer_len, "STEP_%04d:" , i );
-		sprintf_s(comment_buffer, string_bufer_len, "%02d:%02d", i/60 , i%60 );
-		printasm(asm_buffer, "", comment_buffer );	
-
 
 		for (uint8_t r = 0; r < LCD_REG_COUNT; r++) {
 
@@ -1262,6 +1256,16 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		total_cycle_count += step_cycle_count;
 
+		// Create a label for the correspinding start step to jump into
+		// This comes right before the PUASE so the start step can display the 
+		// current step and jump jump and pause until thenext step is Ready to go. 
+
+		sprintf_s(asm_buffer, string_bufer_len, "STEP_PAUSE_%04d:", i);
+		sprintf_s(comment_buffer, string_bufer_len, "%02d:%02d", i / 60, i % 60);
+		printasm(asm_buffer, "", comment_buffer);
+
+
+
 		// Interlock motif
 
 		// Here we have the motif that will sleep until the next second transition
@@ -1272,7 +1276,6 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 		// NOTE THAT THIS HAS A HARDCODED ASSUMPTION THAT FOUT IS ON VPORT2 PIN 2!!!!
 
-		printblankline();
 		printasm("PAUSE"		, "", "Sleep until next second trigger from RX8900");
 
 		/*
@@ -1291,9 +1294,137 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 	sprintf_s(comment_buffer, string_bufer_len, "--- Total display update cycles in sequence: %d", total_cycle_count );
 	printcomment(comment_buffer);
 
-
 	cout << endl; 
 	printasm("RET", "", "All done!");
+
+	// Now we emit a series of short code prembles that display a single step on the LCD and then 
+	// jump into the next step in the main sequence. 
+
+	cout << "" << endl;
+	cout << "// Step starting blocks\n\n";
+	cout << "// Jumping to one of these will blinkly write the step to the LCD with\n\n";
+	cout << "// no optimizations and then jump to the next step And continue the series\n\n";
+	cout << "// from there. We neeed this to get started, otherwise the optimization might\n\n";
+	cout << "// cuase us to not comepletly set up the display right on the first step. See why?\n\n";
+
+	printblankline();
+
+	// Reset back to start
+	regs_now = initial_lcd_reg_state;
+
+	for (int i = 0; i < sequence_count; i++) {
+
+		lcd_reg_state regs_next = sequence_of_lcd_reg_states[i];
+
+		// Create a label to jump into
+
+		sprintf_s(asm_buffer, string_bufer_len, "STEP_SETUP_%04d:", i);
+		sprintf_s(comment_buffer, string_bufer_len, "%02d:%02d", i / 60, i % 60);
+		printasm(asm_buffer, "", comment_buffer);
+
+		for (uint8_t r = 0; r < LCD_REG_COUNT; r++) {
+
+			// But we do not make any assumtions about the contents of the working register on entry, although
+			// we can skip reloading it with a value that was loaded withing this start step. 
+			// It is actually important that we load the working register here in the same was as in the main so
+			// that when we jump into the main sequence it will be loaded as expected by that code. 
+
+			bool working_reg_set = false;
+
+			// Here we want to emit code to set any LCD register that was will NOT be emitted 
+			// in the optimized code we are jumpping into above. The above code skips any register that is not touched 
+			// or is the same as the previous step. 
+
+
+			if (regs_now.regs[r].touched) {
+
+				if (regs_next.regs[r].value == regs_now.regs[r].value) {
+
+					// It is OK to use the cached registers and indexes since they are already loaded up for us anyway. 
+
+
+					int new_value = regs_next.regs[r].value;		// This is the value we want to store 
+
+					// Look and see if we have this value in a cache register...
+
+					struct assigned_and_matching_value_functor : std::unary_function< avr_reg_and_cost_type, bool>
+					{
+						assigned_and_matching_value_functor(const int& value) : value(value) {}
+						bool operator()(const avr_reg_and_cost_type& arg) const { return arg.assigned&& arg.value == value; }
+						const int& value;
+					};
+
+					int source_reg;		// The AVR register that has the value that we want to store in it (assigned either to a cache or to temp reg
+
+					auto found_cache_reg = std::find_if(avr_reg_table.begin(), avr_reg_table.end(), assigned_and_matching_value_functor(new_value));
+
+					if (found_cache_reg != avr_reg_table.end()) {
+
+						// We found a matching value in the table of cache registers that we can use directly
+
+						sprintf_s(comment_buffer, string_bufer_len, "Found value %3d in cache register", new_value);
+						printcomment(comment_buffer);
+
+						source_reg = found_cache_reg->reg;
+
+					}
+					else {
+
+						// This value is not in a cache register , so we need it int the working register
+						// and will use it from there
+
+						if (working_reg_set && new_value == working_reg_value) {		// No need to load the working_reg with a value if it is already set from last time
+
+							sprintf_s(comment_buffer, string_bufer_len, "Skipped redundant load of value %3d into working register. Wow.", new_value);
+							printcomment(comment_buffer);
+
+							//sprintf_s(comment_buffer, string_bufer_len, "Value %3d already in working register at step %4d at %02d:%02d. Wow.", new_value , i , i/60 , i% 60 );
+							//printcomment(comment_buffer);
+
+						}
+						else {
+
+							// Need to get the new_value into the working reg
+
+							sprintf_s(asm_buffer, string_bufer_len, "LDI r%02d,0x%2.02x", working_reg, new_value);
+							printasm(asm_buffer, "", "Load uncached value into working register");	// Apparently clobber field only likes lower case
+
+							working_reg_value = new_value;
+							working_reg_set = true;				// Now we know it is set, so we cna use it if it comes up again in this step
+
+
+						}
+
+						source_reg = working_reg;
+
+					}
+
+					sprintf_s(asm_buffer, string_bufer_len, reg_access_asm_strings[r], source_reg);
+					printasm(asm_buffer, "", reg_access_comment_strings[r]);
+
+				} else {
+
+					sprintf_s(comment_buffer, string_bufer_len, "LCD reg %02d changes in this step so will be set by optimized code above.", r );
+					printcomment(comment_buffer);
+
+				}
+
+			}	
+
+		}
+
+		// Now jump into the main sequence where we belong right before the PUASE
+		// From there will will pick up and eveything will be hunky dory
+
+		sprintf_s(asm_buffer, string_bufer_len, "JMP STEP_PAUSE_%04d", i);
+		sprintf_s(comment_buffer, string_bufer_len, "%02d:%02d", i / 60, i % 60);
+		printasm(asm_buffer, "", comment_buffer);
+
+		cout << endl;
+
+		regs_now= regs_next;
+
+	}
 
 	// Now we emit a jump table that wil be used by update_lcd_1_hour_starting_at() to 
 	// jump to the correct step in the above sequence
@@ -1304,12 +1435,12 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 
 	cout << "" << endl;
 
-	cout << "STEP_JMP_TABLE:" << endl;
+	cout << "STEP_START_JMP_TABLE:" << endl;
 
 
 	for (int i = 0; i < sequence_count; i++) {
 
-		sprintf_s(asm_buffer, string_bufer_len, "JMP STEP_%04d", i);
+		sprintf_s(asm_buffer, string_bufer_len, "JMP STEP_START_%04d", i);
 		sprintf_s(comment_buffer, string_bufer_len, "%02d:%02d", i / 60, i % 60);
 		printasm(asm_buffer, "", comment_buffer);
 
@@ -1361,8 +1492,8 @@ void emit_code_for_lcd_steps(lcd_reg_state initial_lcd_reg_state, lcd_reg_state 
 	cout << "// ...although the code there is wrong!" << endl;
 	cout << "" << endl;
 
-	printasm("subi  r24, lo8(-(pm(STEP_JMP_TABLE)))", "r24", "");
-	printasm("sbci  r25, hi8(-(pm(STEP_JMP_TABLE)))", "r25", "Add the base address to the index");
+	printasm("subi  r24, lo8(-(pm(STEP_START_JMP_TABLE)))", "r24", "");
+	printasm("sbci  r25, hi8(-(pm(STEP_START_JMP_TABLE)))", "r25", "Add the base address to the index");
 
 	printcomment("r25:r24 now points to address of the entry of the jump table for the requestesd step");
 
