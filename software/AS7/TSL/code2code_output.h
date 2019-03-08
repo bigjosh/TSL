@@ -15,12 +15,24 @@
 #define FOUT_VPORT (VPORT2)
 #define FOUT_PIN   (2)
 
-extern void update_lcd_1_hour();
+#define TRIGGER_VPORT (VPORT0)
+#define TRIGGER_PIN (7)
 
-// Jump to a specific step where step 0 is "0000" and step 3599 is "5959"
-// Starts at the requested step and returns after reaching step 3600
-// The requested step is displayed immediately 
+// Count bottom 4 digits from 0000 to 5959 
+// with a 1 second interlock on VPORT2.2
 
-extern void update_lcd_1_hour_starting_at(uint16_t step);
+extern void lcd_optimized_run_hour();
+            
+// Show the Ready Mode figure 8 pattern 
+// with a 1 second interlock on VPORT2.2
+// Run until 
+
+
+extern void lcd_optimized_run_ready();
+
+// Purrdee
+
+extern void lcd_optimized_run_sinewave();
+
 
 #endif /* CODE2CODE_OUTPUT_H_ */

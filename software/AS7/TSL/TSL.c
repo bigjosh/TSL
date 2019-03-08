@@ -753,16 +753,48 @@ inline void showNowH(  uint8_t h ) {
 
 void diagnostic_init_Pins() {
 
-    // Map PORTC to Virtual Port 0
-    // Since we will be Accessing these every minute
-    // to check for diagnostic pins, this will make those accesses much faster.
 
-    PORTCFG.VPCTRLA = PORTCFG_VP0MAP_PORTC_gc;
 
     // These appear on ISP pins 3 & 4 respectively
 
     PORTC.PIN2CTRL = PORT_OPC_PULLUP_gc ;
     PORTC.PIN3CTRL = PORT_OPC_PULLUP_gc ;
+}
+
+// Set up some ports for more efficient access
+
+
+void vport_init() {
+
+    // Map PORTC to Virtual Port 0
+    // Since we will be Accessing these every minute
+    // to check for diagnostic pins, this will make those accesses much faster.
+
+    PORTCFG.VPCTRLA = PORTCFG_VP0MAP_PORTC_gc;    
+    
+    
+    // Put PORTB onto VP2 so we can test the FOUT signal in single instruction
+    // Note that the VP2 bit 2 is HARDCODED into the code2code program so any changes must be reflected there too
+
+    PORTCFG.VPCTRLB  = PORTCFG_VP2MAP_PORTB_gc;
+
+    /*
+    
+    Note that these tests are important, but can not be outside a comment because of the way VPORTx is implemented a a pointer.
+
+    #if (FOUT_VPORT) != (VPORT2)
+    #error If you change the FOUT VPORT you must also update the code in code2code.cpp
+    #endif
+
+
+    #if (TRIGGER_VPORT) != (VPORT0)
+        #error If you change the FOUT VPORT you must also update the code in code2code.cpp
+    #endif    
+    
+    
+    
+    */
+    
 }
 
 void diagnostic_init_PinT_OutputMode() {
@@ -788,7 +820,6 @@ void  diagnostic_out_PinB_1() {
 void  diagnostic_out_PinB_0() {
     PORTC.OUTCLR = _BV(2);
 }
-
 
 
 inline uint8_t diagnostic_in_PinB_Grounded() {
@@ -841,21 +872,6 @@ void FOUT_in_pin_enable() {
     #if FOUT_PIN != 2 
         #error If you change the FOUT pin you must also update the code in code2code.cpp
     #endif
-
-    // Put PORTB onto VP2 so we can test the FOUT signal in single instruction
-    // Note that the VP2 bit 2 is HARDCODED into the code2code program so any changes must be reflected there too
-
-    PORTCFG.VPCTRLB  = PORTCFG_VP2MAP_PORTB_gc;
-
-    /*
-    
-    Note that this test is important, but can not be outside a comment because of the way VPORT0 is implemented a a pointer.
-
-    #if (FOUT_VPORT) != (VPORT2)
-        #error If you change the FOUT VPORT you must also update the code in code2code.cpp
-    #endif
-    
-    */
             
 }
 
@@ -2462,6 +2478,7 @@ int main(void)
 
     diagnostic_init_Pins();             // Set pullups on the 2 extra pins on the ISP just to keep them from floating. We can also uses these for diagnostics and programming.
 
+    vport_init();                       // Set up all VPORTs. These let us access the trigger pin & FOUT more efificently
 
     // Set up the ADC registers that we will use for low battery checks
     // This must happen before we shut it down since we can't access registers
@@ -2588,10 +2605,20 @@ int main(void)
 
     */
     
-    #warning
-    update_lcd_1_hour_starting_at(1020);
-    update_lcd_1_hour_starting_at(10);    
-    update_lcd_1_hour();
+    triggerPinEnable();
+  
+    while ( (TRIGGER_VPORT.IN & _BV(TRIGGER_PIN) ) ) {
+        lcd_optimized_run_sinewave();        
+    }     
+    
+    asm("break");   
+    
+       lcd_optimized_run_sinewave();   
+      
+    //lcd_optimized_run_sinewave();
+    lcd_optimized_run_ready();
+    
+    lcd_optimized_run_hour();
     clearLCD();
     
     /*

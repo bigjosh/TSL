@@ -122,6 +122,13 @@ const uint8_t lcd_font_char_d    = { SEG_G | SEG_B | SEG_A | SEG_F | SEG_E};  //
 const uint8_t lcd_font_char_U    = { SEG_C | SEG_B | SEG_A | SEG_F | SEG_E};  // d
 
 
+// This sequence is shown in Ready To Lanuch mode
+
+static const uint8_t figureEightSteps[] = {
+    SEG_A, SEG_B , SEG_G , SEG_E , SEG_D , SEG_C , SEG_G , SEG_F
+};
+
+
 // Map LCD seg pins to MCU seg pins (set by PCB layout)
 
 #define LCD_SEG_R01 24
@@ -722,9 +729,6 @@ void spinOff( uint8_t d,  uint8_t step ) {
 
 }
 
-static const uint8_t figureEightSteps[] = {
-    SEG_A, SEG_B , SEG_G , SEG_E , SEG_D , SEG_C , SEG_G , SEG_F
-};
 
 void figure8On( uint8_t d,  uint8_t s ) {
 
