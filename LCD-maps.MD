@@ -329,21 +329,48 @@ Here are all the occurrences...
 
  OK, this last optimization saved us 24 cycles at 8Mhz over a 1 hour sequence. That adds up to a power savings of less than [one ten millionth of a percent](https://www.google.com/search?ei=L5Z7XIz5HY-1_AaXsqU4&q=24+*+%281%2F%288Mhz%29%29+%2F+%28+1+hour+%29+in+percent&oq=15+*+%281%2F%288Mhz%29%29+%2F+%28+1+hour+%29+in+percent&gs_l=psy-ab.3..33i160.6737.7593..7746...0.0..0.71.478.7......0....1..gws-wiz.......0i71j33i299j33i10i160.x4a450ifR-Q). We can expect a TSL with this optimization to get an additional [26.29 seconds](https://www.google.com/search?ei=1JZ7XLzoJYu2ggevjLrIBA&q=%2815+*+%281%2F%288Mhz%29%29+%2F+%281+hour%29%29+*+%281000+years%29&oq=%2815+*+%281%2F%288Mhz%29%29+%2F+%281+hour%29%29+*+%281000+years%29&gs_l=psy-ab.3...1600.4886..5165...0.0..0.130.586.7j1......0....1..gws-wiz.......0i71j33i299j33i160j33i10i299j33i10i160.FUJ9Mi_3FJk) of battery life over a 1,000 year run time. I think it is time to go to bed! :)
 
+## Top O the hour
+
+Every time the the hour rolls, this code returns to the main TSL code, which updates the hours and days and does some other rare stuff like maybe checking for low battery. Then the TSL code jump right back into the optimized sequencer to start at 0000 again.
+
+The sequencer code explicitly sets every LCD register on the first step. This simplifies everything and makes it so that (1) you don't have to know what the LCD looks like when you jump into the optimized code and (2) you can make the optimized code loop back and repeat the steps without having to precompute how the final step will leave the LCD. Ultimately this is worth the dozen or so instructions it costs each time the sequence is run. 
+
 ## Jump right in
 
 When the TSL starts after a battery change then we starts at whatever time the TSL should be showing (calculated from the internal clock - the trigger time).
 
 We need to make a way that we can start at any step in this 1 hour sequence so we can start at whatever time we need after a battery change. 
 
-To do this, you might think we could just jump to whatever the current time is... but remember that every updating in this sequence has an unpredictable number of instructions in it so how do we find the address of the one we want?
+To do this, you might think we could just jump to whatever the current time is... but remember that every update in this sequence has an unpredictable number of instructions in it so how do we find the address of the one we want?
 
-Well, I made an amazingly cool jump table system that would set up all the register and then jump directly into the requested step by push the target onto the stack and then doing a (fake) return.... but it turns out we do not have enough FLASH for all that code!
+Well, I made an amazingly cool jump table system that would set up all the registers and then jump directly into the requested step by push the target onto the stack and then doing a (fake) return.... but it turns out we do not have enough FLASH for all that code!
 
 If you want to be impressed, check out the `/setup-step` branch.
 
 I the meantime we have no choice but to go ghetto and run though the remaining time in the current hour anytime we wake after a battery change. Once we are back at the top of an hour, we can jump into the optimized code. This is aesthetically displeasing but it is gonna be ok because this code will likely never run in our lifetime, and even then will will run for less than an hour every century. 
 
 ...but do go look at the jump table code, I worked really hard on it and it is super smooth. 
+
+## We built it, now let's leverage it!
+
+Ok, we did all this work to basically build an optimizing compiler for LCD updating, and then we run out our time updating code though it.
+
+But what about life before the pin pulls?
+
+It turns out we can run our Ready Mode figure 8 animation though the same optimizer and get all the benefits!
+
+One wrinkle is that the ready mode repeats indefinitely until the trigger pin is pulled, rather than a fixed number of steps like the hour steps.
+
+To handle this we add two new parameters to the code emitter: the interstep macro and a loop flag. 
+
+The interstep macro is inserted between each step of the sequence. For the hour display, it just sleeps and then interlocks on FOUT to make sure 1 second has passed. For the ready display, it also checks the trigger pin and if the pin is pulled then it immediately returns. Things are set up so that on that return all of the register and the stack are restored before returning to the caller of the optimized function. 
+
+## Heck, mind as well make a sine wave display
+
+If you have a compiler, use it! I made a new sine wave display that looks real nice. Here I made the interstep macro check the LCD frame complete flag, so the display updates as fast as the LCD can show the next fame. Sweet! 
+
+
+
 
 
 ### Results
