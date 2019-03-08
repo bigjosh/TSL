@@ -13,21 +13,19 @@
     // Interlock on a high-to-low then low-to-high transition on FOUT (1 second)
     SLEEP                    ; Wait for any edge interrupt from RX8900
     SBIC 0x1a, 2             ; Skip to next phase if !(VPORT2.IN & 0x04)
-    RJMP . + 6               ; ...or go back to sleep and wait again
+    RJMP . - 6               ; ...or go back to sleep and wait again
     SLEEP                    ; Wait for any edge interrupt from RX8900
     SBIS 0x1a, 2             ; Skip to next phase if (VPORT2.IN & 0x04)
-    RJMP . + 6               ; ...or go back to sleep and wait again
+    RJMP . - 6               ; ...or go back to sleep and wait again
 .ENDM
 
 // Compute steps 0000 - 5959 
 
+//--- start of lcd_optimized_run_hour_loop:
     // Sequence name: hour
     // Sequence count: 3600
 
-// Actual function called from C to 
-
-// step though a full hour of LCD updates (3600 in all)
-
+// Actual function called from C is here...
 
 .global lcd_optimized_run_hour
 lcd_optimized_run_hour:
@@ -97,9 +95,9 @@ lcd_optimized_run_hour:
     PUSH r16                 ; Save reg 16 to stack
     LDI r18,136              ; Load cache value 136 into working_reg
     MOV r16, 18              ; Move value 136 into reg 16 (used 104 times)
-    // This macro will load up the indirect pointers to point to the top 3 LCD addresses
+    // This  will load up the indirect pointers to point to the top 3 LCD addresses
     // so we can get to those in 1 cycle with ST rather than 2 cycles for an STS
-    // This macro does NOT alter the stack (important)
+    // This does NOT alter the stack
     LDI r27,0x0d             ; Store high byte of address of LCD reg 06 to X
     LDI r26,0x16             ; Store low byte of address of LCD reg 06 to X
     // We have to manually save Y becuase C expects it to be the same when we return
@@ -110,6 +108,38 @@ lcd_optimized_run_hour:
     LDI r31,0x0d             ; Store high byte of address of LCD reg 10 to Z
     LDI r30,0x1a             ; Store low byte of address of LCD reg 10 to Z
 
+// Ok now we start the sequnce! We do this with a call so that the
+// interstep macro can return and we will have a chance to clean up before
+// returning to the caller of the whole sequence
+    RCALL lcd_optimized_run_hour_start     ; This is a relative call to actual update steps
+// The stepping is done, clean up regs and stack before ruturning to caller
+
+    POP r28                  ; Restore reg 28 from stack
+    POP r29                  ; Restore reg 29 from stack
+    POP r16                  ; Restore reg 16 from stack
+    POP r15                  ; Restore reg 15 from stack
+    POP r14                  ; Restore reg 14 from stack
+    POP r13                  ; Restore reg 13 from stack
+    POP r12                  ; Restore reg 12 from stack
+    POP r11                  ; Restore reg 11 from stack
+    POP r10                  ; Restore reg 10 from stack
+    POP r09                  ; Restore reg 09 from stack
+    POP r08                  ; Restore reg 08 from stack
+    POP r07                  ; Restore reg 07 from stack
+    POP r06                  ; Restore reg 06 from stack
+    POP r05                  ; Restore reg 05 from stack
+    POP r04                  ; Restore reg 04 from stack
+    POP r03                  ; Restore reg 03 from stack
+    POP r02                  ; Restore reg 02 from stack
+    POP r01                  ; Restore reg 01 from stack
+    POP r00                  ; Restore reg 00 from stack
+    POP r17                  ; Restore reg 17 from stack
+
+    RET                      ; All done!
+
+// Here begin the actual LCD update steps. These will run until we run out 
+// of steps (if !loop) or the interstep macro executes a RET
+lcd_optimized_run_hour_start:
 
     // ---- Step 0000 (00:00)
     // We special case step 0 and brute force update all LCD registers since we don't know what they were coming in
@@ -37106,53 +37136,36 @@ lcd_optimized_run_hour:
 
     PAUSE                    ; Interstep macro
 
-    POP r28                  ; Restore reg 28 from stack
-    POP r29                  ; Restore reg 29 from stack
-    POP r16                  ; Restore reg 16 from stack
-    POP r15                  ; Restore reg 15 from stack
-    POP r14                  ; Restore reg 14 from stack
-    POP r13                  ; Restore reg 13 from stack
-    POP r12                  ; Restore reg 12 from stack
-    POP r11                  ; Restore reg 11 from stack
-    POP r10                  ; Restore reg 10 from stack
-    POP r09                  ; Restore reg 09 from stack
-    POP r08                  ; Restore reg 08 from stack
-    POP r07                  ; Restore reg 07 from stack
-    POP r06                  ; Restore reg 06 from stack
-    POP r05                  ; Restore reg 05 from stack
-    POP r04                  ; Restore reg 04 from stack
-    POP r03                  ; Restore reg 03 from stack
-    POP r02                  ; Restore reg 02 from stack
-    POP r01                  ; Restore reg 01 from stack
-    POP r00                  ; Restore reg 00 from stack
-    POP r17                  ; Restore reg 17 from stack
-
     // --- Total display update cycles in sequence: 15821
-
-    RET                      ; All done!
-.MACRO HALF_PAUSE_CHECK_TRIGGER
+    RET                      ; No loop, so return from the steps and clean up
+//--- end of lcd_optimized_run_hour
+.MACRO PAUSE_CHECK_TRIGGER
     // This macro will pause until the next second starts.
-    // It has hardcoded the VPORT and bit for the FOUT pin.
-    // Someday we can shrinnk this down to just a SLEEP when
-    // PCB V6 comes out.
     // Interlock on a high-to-low then low-to-high transition on FOUT (1 second)
+    // After every sleep it also checks the trigger pin bit and
+    // if the bit is set, then it will exit.
+    // Has hardcoded the VPORT and pin for both FOUT and trigger pin.
+    1:                       ; This is a local label. Google it.
     SLEEP                    ; Wait for any edge interrupt from RX8900
+    sbis 0x12, 7             ; This will skip the next instruction if the pin is in
+    ret                      ; If the pin is pulled, then Return immedeately
     SBIC 0x1a, 2             ; Skip to next phase if !(VPORT2.IN & 0x04)
-    RJMP . + 6               ; ...or go back to sleep and wait again
+    RJMP 1b                  ; ...or go back to sleep and wait again
+    1:                       ; This is a local label. Google it.
     SLEEP                    ; Wait for any edge interrupt from RX8900
+    sbis 0x12, 7             ; This will skip the next instruction if the pin is in
+    ret                      ; If the pin is pulled, then Return immedeately
     SBIS 0x1a, 2             ; Skip to next phase if (VPORT2.IN & 0x04)
-    RJMP . + 6               ; ...or go back to sleep and wait again
+    RJMP 1b                ; ...or go back to sleep and wait again
 .ENDM
 
 // Compute steps
 
+//--- start of lcd_optimized_run_ready_loop:
     // Sequence name: ready
     // Sequence count: 8
 
-// Actual function called from C to 
-
-// step though a full hour of LCD updates (3600 in all)
-
+// Actual function called from C is here...
 
 .global lcd_optimized_run_ready
 lcd_optimized_run_ready:
@@ -37168,9 +37181,9 @@ lcd_optimized_run_ready:
     LDI r22, 68              ; Cache value  68 in reg 22 (used 9 times)
     LDI r23,136              ; Cache value 136 in reg 23 (used 9 times)
     LDI r24,170              ; Cache value 170 in reg 24 (used 6 times)
-    // This macro will load up the indirect pointers to point to the top 3 LCD addresses
+    // This  will load up the indirect pointers to point to the top 3 LCD addresses
     // so we can get to those in 1 cycle with ST rather than 2 cycles for an STS
-    // This macro does NOT alter the stack (important)
+    // This does NOT alter the stack
     LDI r27,0x0d             ; Store high byte of address of LCD reg 08 to X
     LDI r26,0x18             ; Store low byte of address of LCD reg 08 to X
     // We have to manually save Y becuase C expects it to be the same when we return
@@ -37181,7 +37194,20 @@ lcd_optimized_run_ready:
     LDI r31,0x0d             ; Store high byte of address of LCD reg 10 to Z
     LDI r30,0x1a             ; Store low byte of address of LCD reg 10 to Z
 
-lcd_optimized_run_ready_loop:
+// Ok now we start the sequnce! We do this with a call so that the
+// interstep macro can return and we will have a chance to clean up before
+// returning to the caller of the whole sequence
+    RCALL lcd_optimized_run_ready_start     ; This is a relative call to actual update steps
+// The stepping is done, clean up regs and stack before ruturning to caller
+
+    POP r28                  ; Restore reg 28 from stack
+    POP r29                  ; Restore reg 29 from stack
+
+    RET                      ; All done!
+
+// Here begin the actual LCD update steps. These will run until we run out 
+// of steps (if !loop) or the interstep macro executes a RET
+lcd_optimized_run_ready_start:
 
     // ---- Step 0000 (00:00)
     // We special case step 0 and brute force update all LCD registers since we don't know what they were coming in
@@ -37211,7 +37237,7 @@ lcd_optimized_run_ready_loop:
     STS 0x0D1E,r21           ; direct store to LCD register 14
     // --- Cycles in this step: 21
 
-    HALF_PAUSE_CHECK_TRIGGER     ; Interstep macro
+    PAUSE_CHECK_TRIGGER      ; Interstep macro
 
     // ---- Step 0001 (00:01)
     // Found value   0 in cache register
@@ -37240,7 +37266,7 @@ lcd_optimized_run_ready_loop:
     STS 0x0D1E,r19           ; direct store to LCD register 14
     // --- Cycles in this step: 21
 
-    HALF_PAUSE_CHECK_TRIGGER     ; Interstep macro
+    PAUSE_CHECK_TRIGGER      ; Interstep macro
 
     // ---- Step 0002 (00:02)
     // Found value 170 in cache register
@@ -37257,7 +37283,7 @@ lcd_optimized_run_ready_loop:
     ST Z,r19                 ; 8 accesses to R10
     // --- Cycles in this step: 9
 
-    HALF_PAUSE_CHECK_TRIGGER     ; Interstep macro
+    PAUSE_CHECK_TRIGGER      ; Interstep macro
 
     // ---- Step 0003 (00:03)
     // Found value  17 in cache register
@@ -37274,7 +37300,7 @@ lcd_optimized_run_ready_loop:
     ST Z,r23                 ; 8 accesses to R10
     // --- Cycles in this step: 9
 
-    HALF_PAUSE_CHECK_TRIGGER     ; Interstep macro
+    PAUSE_CHECK_TRIGGER      ; Interstep macro
 
     // ---- Step 0004 (00:04)
     // Found value  17 in cache register
@@ -37303,7 +37329,7 @@ lcd_optimized_run_ready_loop:
     STS 0x0D1E,r23           ; direct store to LCD register 14
     // --- Cycles in this step: 21
 
-    HALF_PAUSE_CHECK_TRIGGER     ; Interstep macro
+    PAUSE_CHECK_TRIGGER      ; Interstep macro
 
     // ---- Step 0005 (00:05)
     // Found value  34 in cache register
@@ -37326,7 +37352,7 @@ lcd_optimized_run_ready_loop:
     STS 0x0D1E,r19           ; direct store to LCD register 14
     // --- Cycles in this step: 15
 
-    HALF_PAUSE_CHECK_TRIGGER     ; Interstep macro
+    PAUSE_CHECK_TRIGGER      ; Interstep macro
 
     // ---- Step 0006 (00:06)
     // Found value   0 in cache register
@@ -37349,7 +37375,7 @@ lcd_optimized_run_ready_loop:
     ST Z,r19                 ; 8 accesses to R10
     // --- Cycles in this step: 15
 
-    HALF_PAUSE_CHECK_TRIGGER     ; Interstep macro
+    PAUSE_CHECK_TRIGGER      ; Interstep macro
 
     // ---- Step 0007 (00:07)
     // Found value 136 in cache register
@@ -37372,15 +37398,11 @@ lcd_optimized_run_ready_loop:
     ST Z,r20                 ; 8 accesses to R10
     // --- Cycles in this step: 15
 
-    HALF_PAUSE_CHECK_TRIGGER     ; Interstep macro
-    JMP lcd_optimized_run_ready_loop     ; loop was set so back we go
-
-    POP r28                  ; Restore reg 28 from stack
-    POP r29                  ; Restore reg 29 from stack
+    PAUSE_CHECK_TRIGGER      ; Interstep macro
 
     // --- Total display update cycles in sequence: 126
-
-    RET                      ; All done!
+    JMP lcd_optimized_run_ready_start     ; loop was set so back we go
+//--- end of lcd_optimized_run_ready
 
 // This macro will wait until the current LCD frame is completed
 // Note that this could be more power efficient.
@@ -37405,13 +37427,11 @@ lcd_optimized_run_ready_loop:
 // pass 7
 // Emitting magic sinewave code now... 
 
+//--- start of lcd_optimized_run_sinewave_loop:
     // Sequence name: sinewave
     // Sequence count: 8
 
-// Actual function called from C to 
-
-// step though a full hour of LCD updates (3600 in all)
-
+// Actual function called from C is here...
 
 .global lcd_optimized_run_sinewave
 lcd_optimized_run_sinewave:
@@ -37466,9 +37486,9 @@ lcd_optimized_run_sinewave:
     PUSH r11                 ; Save reg 11 to stack
     LDI r18,134              ; Load cache value 134 into working_reg
     MOV r11, 18              ; Move value 134 into reg 11 (used 1 times)
-    // This macro will load up the indirect pointers to point to the top 3 LCD addresses
+    // This  will load up the indirect pointers to point to the top 3 LCD addresses
     // so we can get to those in 1 cycle with ST rather than 2 cycles for an STS
-    // This macro does NOT alter the stack (important)
+    // This does NOT alter the stack
     LDI r27,0x0d             ; Store high byte of address of LCD reg 04 to X
     LDI r26,0x14             ; Store low byte of address of LCD reg 04 to X
     // We have to manually save Y becuase C expects it to be the same when we return
@@ -37479,6 +37499,33 @@ lcd_optimized_run_sinewave:
     LDI r31,0x0d             ; Store high byte of address of LCD reg 06 to Z
     LDI r30,0x16             ; Store low byte of address of LCD reg 06 to Z
 
+// Ok now we start the sequnce! We do this with a call so that the
+// interstep macro can return and we will have a chance to clean up before
+// returning to the caller of the whole sequence
+    RCALL lcd_optimized_run_sinewave_start     ; This is a relative call to actual update steps
+// The stepping is done, clean up regs and stack before ruturning to caller
+
+    POP r28                  ; Restore reg 28 from stack
+    POP r29                  ; Restore reg 29 from stack
+    POP r11                  ; Restore reg 11 from stack
+    POP r10                  ; Restore reg 10 from stack
+    POP r09                  ; Restore reg 09 from stack
+    POP r08                  ; Restore reg 08 from stack
+    POP r07                  ; Restore reg 07 from stack
+    POP r06                  ; Restore reg 06 from stack
+    POP r05                  ; Restore reg 05 from stack
+    POP r04                  ; Restore reg 04 from stack
+    POP r03                  ; Restore reg 03 from stack
+    POP r02                  ; Restore reg 02 from stack
+    POP r01                  ; Restore reg 01 from stack
+    POP r00                  ; Restore reg 00 from stack
+    POP r17                  ; Restore reg 17 from stack
+
+    RET                      ; All done!
+
+// Here begin the actual LCD update steps. These will run until we run out 
+// of steps (if !loop) or the interstep macro executes a RET
+lcd_optimized_run_sinewave_start:
 
     // ---- Step 0000 (00:00)
     // We special case step 0 and brute force update all LCD registers since we don't know what they were coming in
@@ -37685,23 +37732,7 @@ lcd_optimized_run_sinewave:
 
     PAUSE_UNTIL_LCD_FRAME_COMPLETE     ; Interstep macro
 
-    POP r28                  ; Restore reg 28 from stack
-    POP r29                  ; Restore reg 29 from stack
-    POP r11                  ; Restore reg 11 from stack
-    POP r10                  ; Restore reg 10 from stack
-    POP r09                  ; Restore reg 09 from stack
-    POP r08                  ; Restore reg 08 from stack
-    POP r07                  ; Restore reg 07 from stack
-    POP r06                  ; Restore reg 06 from stack
-    POP r05                  ; Restore reg 05 from stack
-    POP r04                  ; Restore reg 04 from stack
-    POP r03                  ; Restore reg 03 from stack
-    POP r02                  ; Restore reg 02 from stack
-    POP r01                  ; Restore reg 01 from stack
-    POP r00                  ; Restore reg 00 from stack
-    POP r17                  ; Restore reg 17 from stack
-
     // --- Total display update cycles in sequence: 140
-
-    RET                      ; All done!
+    RET                      ; No loop, so return from the steps and clean up
+//--- end of lcd_optimized_run_sinewave
 .end

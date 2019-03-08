@@ -2607,15 +2607,7 @@ int main(void)
     
     triggerPinEnable();
   
-    while ( (TRIGGER_VPORT.IN & _BV(TRIGGER_PIN) ) ) {
-        lcd_optimized_run_sinewave();        
-    }     
-    
-    asm("break");   
-    
-       lcd_optimized_run_sinewave();   
-      
-    //lcd_optimized_run_sinewave();
+    lcd_optimized_run_sinewave();
     lcd_optimized_run_ready();
     
     lcd_optimized_run_hour();

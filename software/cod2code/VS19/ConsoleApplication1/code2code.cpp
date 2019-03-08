@@ -698,6 +698,8 @@ void printblankline() {
 // This lets us potentially do global optimizations on them. 
 
 // interstpe macro is a macro that will be called between steps.
+// If you hit a RET in this macro then you will return from the sequnce in an orderly way (stack restored)
+
 // if loop is true, then the sequence will loop forever (unless it hit s RET in the interloop macro), otherise
 // it will return at the end of the last step. 
 
@@ -705,16 +707,15 @@ void printblankline() {
 
 void emit_code_for_lcd_steps( const char *seq_name , lcd_reg_state initial_lcd_reg_state, lcd_reg_state sequence_of_lcd_reg_states[], int sequence_count, const char *interstep_macro , bool loop ) {
 
+
+	cout << "//--- start of lcd_optimized_run_" << seq_name << "_loop:" << endl;
 	cout << "    // Sequence name: " << seq_name << endl;
 	cout << "    // Sequence count: " << sequence_count << endl;
 	cout << "" << endl;
 
 	lcd_reg_state regs_now;		// Used to hold current register values between steps
 
-
-	cout << "// Actual function called from C to \n\n";
-	cout << "// step though a full hour of LCD updates (3600 in all)\n\n";
-	cout << endl;
+	cout << "// Actual function called from C is here...\n\n";
 	cout << ".global lcd_optimized_run_" << seq_name << endl;		// Make visible to linker and C
 	cout << "lcd_optimized_run_" << seq_name << ":" << endl;		// The label to jump to to start the LCD update sequence
 
@@ -1026,9 +1027,9 @@ void emit_code_for_lcd_steps( const char *seq_name , lcd_reg_state initial_lcd_r
 	// Remeber the ASM string will will output to store a AVR register to this LCD register
 	// This output string must have a %d in it it that will accept the XMEGA register number
 
-	printcomment("This macro will load up the indirect pointers to point to the top 3 LCD addresses");
+	printcomment("This  will load up the indirect pointers to point to the top 3 LCD addresses");
 	printcomment("so we can get to those in 1 cycle with ST rather than 2 cycles for an STS");
-	printcomment("This macro does NOT alter the stack (important)");
+	printcomment("This does NOT alter the stack");
 
 	string_buffer reg_access_asm_strings[LCD_REG_COUNT];
 	string_buffer reg_access_comment_strings[LCD_REG_COUNT];
@@ -1104,20 +1105,39 @@ void emit_code_for_lcd_steps( const char *seq_name , lcd_reg_state initial_lcd_r
 
 	printblankline();
 
+
+	// Used for building emmited strings
+	string_buffer asm_buffer;
+	string_buffer comment_buffer;
+
+	cout << "// Ok now we start the sequnce! We do this with a call so that the" << endl;
+	cout << "// interstep macro can return and we will have a chance to clean up before" << endl;
+	cout << "// returning to the caller of the whole sequence" << endl;
+
+	sprintf_s(asm_buffer, string_bufer_len, "RCALL lcd_optimized_run_%s_start", seq_name );
+	printasm(asm_buffer, "", "This is a relative call to actual update steps");	
+
+	cout << "// The stepping is done, clean up regs and stack before ruturning to caller" << endl;
+
+	cout << endl;
+	stack_manager.popall();
+
+	cout << endl;
+	printasm("RET", "", "All done!");
+
 	// Reset back to start
 	regs_now = initial_lcd_reg_state;
 
-	// USed for building emmited strings
-	string_buffer asm_buffer;
-	string_buffer comment_buffer;
+
 
 	int total_cycle_count = 0;		// Keep track of total cycles to run though the sequence (assming no blocks or banches)
 
 	//sequence_count = 20;
 
-	if (loop) {
-		cout << "lcd_optimized_run_" << seq_name << "_loop:" << endl;
-	}
+	cout << endl;
+	cout << "// Here begin the actual LCD update steps. These will run until we run out " << endl;
+	cout << "// of steps (if !loop) or the interstep macro executes a RET" << endl;
+	cout << "lcd_optimized_run_" << seq_name << "_start" << ":" << endl;
 
 	for (int i = 0; i < sequence_count; i++) {
 
@@ -1230,16 +1250,6 @@ void emit_code_for_lcd_steps( const char *seq_name , lcd_reg_state initial_lcd_r
 
 		total_cycle_count += step_cycle_count;
 
-		// Interlock motif
-
-		// Here we have the motif that will sleep until the next second transition
-		// It is slightly complicted by the fact that the TSL V5 sometimes has sputious triggers on the
-		// the FOUT line due to static electricity so we must interlock on it and test both edges
-		// to avoid skipping steps. Hopefully the next version will fix this and we can just use a 
-		// signle sleep triggered on the rising FOUT edge. 
-
-		// NOTE THAT THIS HAS A HARDCODED ASSUMPTION THAT FOUT IS ON VPORT2 PIN 2!!!!
-
 		printblankline();
 		printasm( interstep_macro , "", "Interstep macro");
 
@@ -1252,25 +1262,23 @@ void emit_code_for_lcd_steps( const char *seq_name , lcd_reg_state initial_lcd_r
 
 	}
 
-	if (loop) {
-		// Jump back to the first step!
-		// (We stuck the label in at the top right before the first step)
-		sprintf_s(asm_buffer, string_bufer_len, "JMP lcd_optimized_run_%s_loop" , seq_name );
-		printasm(asm_buffer, "", "loop was set so back we go");
-	}
-
-
 	cout << endl;
-	stack_manager.popall();
-
-	cout << endl;
-	sprintf_s(comment_buffer, string_bufer_len, "--- Total display update cycles in sequence: %d", total_cycle_count );
+	sprintf_s(comment_buffer, string_bufer_len, "--- Total display update cycles in sequence: %d", total_cycle_count);
 	printcomment(comment_buffer);
 
 
-	cout << endl; 
-	printasm("RET", "", "All done!");
+	if (loop) {
+		// Jump back to the first step!
+		// (We stuck the label in at the top right before the first step)
+		sprintf_s(asm_buffer, string_bufer_len, "JMP lcd_optimized_run_%s_start" , seq_name );
+		printasm(asm_buffer, "", "loop was set so back we go");
+	}
+	else {
 
+		printasm("RET", "", "No loop, so return from the steps and clean up");
+	}
+
+	cout << "//--- end of lcd_optimized_run_" << seq_name  << endl;
 
 }
 
@@ -1321,6 +1329,14 @@ void setlcdregsfordigit(lcd_reg_state * lcd_regs, uint8_t place, uint8_t n) {
 
 void lcdEmit1hourCode() {
 
+	// Here we have the motif that will sleep until the next second transition
+	// It is slightly complicted by the fact that the TSL V5 sometimes has sputious triggers on the
+	// the FOUT line due to static electricity so we must interlock on it and test both edges
+	// to avoid skipping steps. Hopefully the next version will fix this and we can just use a 
+	// signle sleep triggered on the rising FOUT edge. 
+
+	// NOTE THAT THIS HAS A HARDCODED ASSUMPTION THAT FOUT IS ON VPORT2 PIN 2!!!!
+
 	cout << ".MACRO PAUSE" << endl;
 	printcomment("This macro will pause until the next second starts.");
 	printcomment("It has hardcoded the VPORT and bit for the FOUT pin.");
@@ -1329,10 +1345,10 @@ void lcdEmit1hourCode() {
 	printcomment("Interlock on a high-to-low then low-to-high transition on FOUT (1 second)");
 	printasm("SLEEP", "", "Wait for any edge interrupt from RX8900");
 	printasm("SBIC 0x1a, 2", "", "Skip to next phase if !(VPORT2.IN & 0x04)");
-	printasm("RJMP . + 6", "", "...or go back to sleep and wait again");
+	printasm("RJMP . - 6", "", "...or go back to sleep and wait again");
 	printasm("SLEEP", "", "Wait for any edge interrupt from RX8900");
 	printasm("SBIS 0x1a, 2", "", "Skip to next phase if (VPORT2.IN & 0x04)");
-	printasm("RJMP . + 6", "", "...or go back to sleep and wait again");
+	printasm("RJMP . - 6", "", "...or go back to sleep and wait again");
 	cout << ".ENDM";
 	cout << endl;
 
@@ -1431,18 +1447,24 @@ void figure8On(lcd_reg_state* lcd_regs, uint8_t d,  uint8_t s ) {
 void lcdEmitReadyToLaunchPatternCode() {
 
 
-	cout << ".MACRO HALF_PAUSE_CHECK_TRIGGER" << endl;
+	cout << ".MACRO PAUSE_CHECK_TRIGGER" << endl;
 	printcomment("This macro will pause until the next second starts.");
-	printcomment("It has hardcoded the VPORT and bit for the FOUT pin.");
-	printcomment("Someday we can shrinnk this down to just a SLEEP when");
-	printcomment("PCB V6 comes out.");
 	printcomment("Interlock on a high-to-low then low-to-high transition on FOUT (1 second)");
+	printcomment("After every sleep it also checks the trigger pin bit and");
+	printcomment("if the bit is set, then it will exit.");
+	printcomment("Has hardcoded the VPORT and pin for both FOUT and trigger pin.");
+	printasm("1:", "", "This is a local label. Google it.");
 	printasm("SLEEP", "", "Wait for any edge interrupt from RX8900");
+	printasm("sbis 0x12, 7", "", "This will skip the next instruction if the pin is in");
+	printasm("ret", "", "If the pin is pulled, then Return immedeately");
 	printasm("SBIC 0x1a, 2", "", "Skip to next phase if !(VPORT2.IN & 0x04)");
-	printasm("RJMP . + 6", "", "...or go back to sleep and wait again");
+	printasm("RJMP 1b", "", "...or go back to sleep and wait again");
+	printasm("1:", "", "This is a local label. Google it.");
 	printasm("SLEEP", "", "Wait for any edge interrupt from RX8900");
+	printasm("sbis 0x12, 7", "", "This will skip the next instruction if the pin is in");
+	printasm("ret", "", "If the pin is pulled, then Return immedeately");
 	printasm("SBIS 0x1a, 2", "", "Skip to next phase if (VPORT2.IN & 0x04)");
-	printasm("RJMP . + 6", "", "...or go back to sleep and wait again");
+	printasm("RJMP . 1b", "", "...or go back to sleep and wait again");
 	cout << ".ENDM";
 	cout << endl;
 
@@ -1492,7 +1514,7 @@ void lcdEmitReadyToLaunchPatternCode() {
 	cout << endl;
 
 
-	emit_code_for_lcd_steps( "ready" ,  regs_init, reg_steps, step , "HALF_PAUSE_CHECK_TRIGGER" , true );
+	emit_code_for_lcd_steps( "ready" ,  regs_init, reg_steps, step , "PAUSE_CHECK_TRIGGER" , true );
 
 }
 
