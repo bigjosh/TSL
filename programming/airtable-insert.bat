@@ -25,7 +25,8 @@ curl\bin\curl -v https://api.airtable.com/v0/app11MZ4rXXpEyFnj/Units -H "Authori
 
 if errorlevel 1 (
 
-	rm %temp_req_file%
+	del %temp_req_file%
+	del %temp_res_file%
 	ENDLOCAL
 	
 	exit /B 1
@@ -46,6 +47,10 @@ REM No chance of the Q having a collision in this context.
 set airtableresescaped=%airtableres:"=Q%
 
 echo %airtableresescaped%
+
+del %temp_req_file%
+del %temp_res_file%
+
 
 exit /B 0 
 

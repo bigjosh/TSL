@@ -11,6 +11,7 @@ color
 REM Update delayseconds to reflect the number of seconds to add to the start time to account for
 REM the delay in getting everything programmed into the EEPROM
 
+
 set delayseconds=7
 set firmwarefile=tsl.hex
 
@@ -19,6 +20,9 @@ set tempeepromfile=%tmp%\burniteeprom.txt
 set tempdeviceidfile=%tmp%\burnitdeviceid.txt
 set tempfirmwarehashfile=%tmp%\burnitfirmwarehash.txt
 set tempfirmwarerecordfile=%tmp%\burnitfirmwarerecord.txt
+
+REM clear out the rrormessage variable since we use this to see if everything OK
+set "errormessage="
 
 if NOT "%burnthis_airtable_api_key%"=="" goto have_api_key
 
@@ -148,10 +152,10 @@ if errorlevel 1 (
 echo Starting time programming sequence at %time%
 
 REM Next lets generate the eeprom block with the current time as start time
-tsl-make-block %tempeepromfile% %delayseconds% | findstr "Start time" >%tempunparsedstarttimefile%
+eeprom-utils-bin\tsl-make-block %tempeepromfile% -o %delayseconds% | findstr "Start time" >%tempunparsedstarttimefile%
 set /p starttimeline=<%tempunparsedstarttimefile%
 REM The time is after the string "Start time:"
-REM This funcky syntax does a substring starting at pos 10
+REM This funky syntax does a substring starting at pos 10
 set "starttime=%starttimeline:~11%"
 
 REM And now program the eeprom block into the XMEGA
@@ -174,6 +178,9 @@ if errorlevel 1 (
 
 
 :end
+
+REM testing
+copy %tempeepromfile% .
 
 REM Clean up after ourselves 
 del %tempeepromfile%

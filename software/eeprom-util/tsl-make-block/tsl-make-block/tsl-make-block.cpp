@@ -118,7 +118,7 @@ const char *parsetimestr(struct tm *tm_out, const char* s) {
 
 }
 
-void writetimeblock(FILE* f, tm* tm_gmt , bool timeset_flag ) {
+void writetimeblock(FILE* f, tm* tm_gmt , uint8_t flag ) {
 
 	int y = tm_gmt->tm_year;		// years since 1900
 
@@ -128,14 +128,14 @@ void writetimeblock(FILE* f, tm* tm_gmt , bool timeset_flag ) {
 	write_bcd(f, tm_gmt->tm_sec);
 	write_bcd(f, tm_gmt->tm_min);
 	write_bcd(f, tm_gmt->tm_hour);
-	write_bcd(f, 1);					// Weeks. We don't use, but must be a sane value 1-7.
+	write_bcd(f, 1);					// Weeks. We don't use, but must be a valid power of two 1-64.
 	write_bcd(f, tm_gmt->tm_mday);
 	write_bcd(f, tm_gmt->tm_mon + 1);					// gmtime() month returned by gmtime is 0-based! But not day?!
 	write_bcd(f, y % 100);							// 2 digit year
 	write_bcd(f, ci);								// Century intelock 
 
 	// flag
-	write_bcd(f, timeset_flag ?  1 : 0 );			// for ste, means set this time, for trigger, means trigger has been pulled
+	write_bcd(f, flag  );			// for set means set this time, for trigger means trigger has been pulled
 	write_bcd(f, 0);								// Padding
 
 }
@@ -273,8 +273,8 @@ int main( int argc , char **argv ) {
 
 	}
 
-	writetimeblock(f, &tm_start_gmt , starttime_set_flag );
-	writetimeblock(f, &tm_start_gmt, triggertime_set_flag );
+	writetimeblock(f, &tm_start_gmt , starttime_set_flag ? 0x00 : 0x01 );		// 0x00=set this time, 0x01=time already set
+	writetimeblock(f, &tm_start_gmt, triggertime_set_flag ? 0x01: 0x00 );		// 0x00=trigger not pulled, 0x01=trigger pulled
 
 	// low voltage flag 
 	write_bcd(f,0);									//  0 indicates that we have not seen a low voltage since inital programming

@@ -113,4 +113,9 @@ If you ever want to remove the stored API key (you are selling the computer, or 
 `REG delete HKCU\Environment /V burnthis_airtable_api_key`
 
 ...and the next time you run `burnthis.bat`you will be asked to enter a new key.
-    
+
+### Checking your work
+
+You can use the `read-eeprom.bat` batch file to read and print the eeprom of an attached TSL. It uses the `tsl-read-block.exe` utility to decode and print the data, and you can also use this utility to work directly with eeprom bin files created by `atprogram.exe` or the `Device Programming` function under `Tools` in Atmel Studio.  
+
+     
