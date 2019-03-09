@@ -223,7 +223,7 @@ The `X` after `EEPro` is a code that tells you the first problem found (they are
 | 5 | `TRIGGER TIME` is before `START TIME` | 
 | 6 | _[elided]_ |
 | 7 | Invalid `START TIME` | 
-| 7 | Invalid `TRIGGER TIME` | 
+| 8 | Invalid `TRIGGER TIME` | 
 
 #### Codes 1-3
 
