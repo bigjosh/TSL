@@ -31,6 +31,7 @@ extern void lcd_optimized_run_hour();
 extern void lcd_optimized_run_ready();
 
 // Purrdee
+// Just for show/fun. Takes about 0.5 sec
 
 extern void lcd_optimized_run_sinewave();
 

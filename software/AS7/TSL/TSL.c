@@ -890,6 +890,17 @@ inline uint8_t fout_pin_in_value() {
 // sometimes due to static electricity.
 // Assumes that the FOUT pin is set to interrupt on _both_ edges.
 
+inline void sleep_until_first_half_of_second() {
+
+    // This first while() will fall though if FOUT is already high
+
+    while (!fout_pin_in_value()) {
+        sleep_cpu();
+    }
+    
+}    
+
+
 inline void sleep_until_next_second() {
 
     // This first while() will fall though if FOUT is already high
@@ -2292,63 +2303,85 @@ void fout_glitch_tester() {
 
 }
 
+
+// Update the display until we get to top of next hour...
+// when we will be able to kick off the optimized hour long code stepper
+// Only possibly runs at power up after a battery change 
+
+void finish_hour( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
+
+    showNowD( d );
+
+    showNowH(h);
+        
+    uint8_t st = s/10;          // seconds tens place
+    uint8_t so = s - (st*10);   // seconds ones place
+        
+    while (m<60) {
+
+        showNowM(m);
+
+        while (st<6) {
+
+            showNowS10s( st );
+
+            while (so<10) {
+
+                showNowS1s( so );
+
+                // To avoid incrementing the count on spurious interrupts, we check FOUT
+                // level and interlock.
+
+                sleep_until_next_second();
+
+                so++;
+
+            }
+            
+            so=0;
+            st++;
+
+        }       // s
+
+        st=0;
+        m++;
+
+    }           // m
+    
+}    
+
+
 // Returns when we hit 999999 days 23:59:59 = 2737.90926 years years.
 // https://www.google.com/search?q=1000000+days+-+1+second
 
-void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
-
-    uint8_t st = s/10;          // seconds tens place
-    uint8_t so = s - (st*10);   // seconds ones place
-
+void run( uint24_t d , uint8_t h) {
+       
     while (d<1000000 ) {
 
         showNowD( d );
-
+        
         while (h<24) {
+            
+            // CHeck for diagnostic pins present every hour on the hour
+            
+            if (diagnostic_in_EitherPin_Grounded()) {        // If either of the diagnostic pins are grounded on the hour...
 
-            showNowH(h);
+                softwareReset();                // Reset, which will jump to diagnostic display
 
-            while (m<60) {
+            }
+            
+            showNowH(h);                   // Update hour on display    
+            
+            // Run a full hour of counts on hyper low power zombie autopiliot. 
+            lcd_optimized_run_hour();
 
-                showNowM(m);
-
-                while (st<6) {
-
-                    showNowS10s( st );
-
-                    while (so<10) {
-
-                        showNowS1s( so );
-
-                        // To avoid incrementing the count on spurious interrupts, we check FOUT
-                        // level and interlock.
-
-                        sleep_until_next_second();
-
-                        so++;
-
-                    }
-                    so=0;
-                    st++;
-
-                }       // s
-
-                st=0;
-                m++;
-
-                if (diagnostic_in_EitherPin_Grounded()) {        // If either of the diagnostic pins are grounded on the hour...
-
-                    softwareReset();                // Reset, which will jump to diagnostic display
-
-                }
-            }           // m
-
-            m=0;
             h++;
         }               // h
+                        
         h=0;
         d++;
 
+        // Once per day on rollover to 00 hours...
 
         // First check for low voltage
         // This takes a lot of power so only do it once every 8 days
@@ -2365,15 +2398,13 @@ void run( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
             }
         }
 
-        if ( (d & 0x7f) == 0x00 ) {     // Every 128 days....
+        if ( ( d -  (d /100 ) ) == 0x00 ) {     // Every 100 days....
 
             clearLCD();
             showc2018JOSH();            // Show copyright egg
 
-            sleep_until_next_second();  // Show for 1 second
+            sleep_until_first_half_of_second();  // Show for 0.5 second
             clearLCD();
-
-            so++;                       // Account for this second
 
         }
 
@@ -2505,28 +2536,34 @@ int main(void)
 
 
 
-    showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
+    //showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
 
     // Note that up until now we have not communicated with the RX8900. It is unclear from the datasheets if we are
     // allowed to communicate now or if we need to wait for the oscillator to stabilize first before talking
     // over TWI, so we take the conservative approach and wait.
        
+    // Delay 2 secs for RX8900 to warm up  (and to show off) 
+    lcd_optimized_run_sinewave();        // 0.5 sec
+    lcd_optimized_run_sinewave();        // 0.5 sec
+    lcd_optimized_run_sinewave();        // 0.5 sec
+    lcd_optimized_run_sinewave();        // 0.5 sec
+          
 
-    _delay_ms(1500);        // tSTA RX8900 oscillator stabilization time 1s max at 25C
-                            // "Please perform initial setting only tSTA (oscillation start time), when the
-                            // built-in oscillation is stable."
+    // tSTA RX8900 oscillator stabilization time 1s max at 25C
+    // "Please perform initial setting only tSTA (oscillation start time), when the
+    // built-in oscillation is stable."
 
-                            // Note that we can not use the interrupt to wake us from sleep here because
-                            // the RTC is not sending it yet!
+    // Note that we can not use the interrupt to wake us from sleep here because
+    // the RTC is not sending it yet!
                             
-                            // Note that right now the MOS switch will be open for the first second, and then will close if the
-                            // Vcc voltage is high enough (it should be). 
+    // Note that right now the MOS switch will be open for the first second, and then will close if the
+    // Vcc voltage is high enough (it should be). 
                             
-                            /*
-                                 Before the voltage detection is performed the first time (1 sec. after initial power-up), the
-                                 RTC and VBAT are supplied via a diode in parallel to the PMOS-switch. If the voltage detector measures a VDD voltage
-                                 above VDET3-level, the RTC will enter NORMAL operation mode.
-                            */
+    /*
+            Before the voltage detection is performed the first time (1 sec. after initial power-up), the
+            RTC and VBAT are supplied via a diode in parallel to the PMOS-switch. If the voltage detector measures a VDD voltage
+            above VDET3-level, the RTC will enter NORMAL operation mode.
+    */
                                                         
 
     rx8900_open_MOS();      // Open the switch that connects Vcc to Vbat. This way when the person pulls the battery out, the
@@ -2605,13 +2642,6 @@ int main(void)
 
     */
     
-    triggerPinEnable();
-  
-    lcd_optimized_run_sinewave();
-    lcd_optimized_run_ready();
-    
-    lcd_optimized_run_hour();
-    clearLCD();
     
     /*
     while (1) {
@@ -2867,9 +2897,12 @@ int main(void)
         // Show a nice pattern until the pin is pulled that shows we are ready
 
         // TODO: Check for low battery in here?
-        // TODO: Make more power efficient?
+        // TODO: Make more power efficient? UPDATE: Done!!!!! THis is hyperoptimized code!
 
-        figure8PatternUntilTriggerReleased();
+        // SHow the optimized ready mode figure 8 pattern until trigger pin is pulled. 
+        lcd_optimized_run_ready();
+        
+        //figure8PatternUntilTriggerReleased();
 
         // Trigger pin pulled!
 
@@ -2982,8 +3015,31 @@ int main(void)
     // We are ready to start counting! See you in 30 years!
 
     // time_since_lanch has our count ready for us.
-
-    run( time_since_lanuch.d , time_since_lanuch.h , time_since_lanuch.m , time_since_lanuch.s );
+    
+    // If we just started after a battery replacement, then hour and second might not be 0
+    // so here we run out the current hour to get a nice even 00:00 transition so the hyperoptimized
+    // code in run can take over.
+    
+    if ( time_since_lanuch.m != 0 || time_since_lanuch.s != 0 ) {
+        
+        finish_hour( time_since_lanuch.d , time_since_lanuch.h , time_since_lanuch.m , time_since_lanuch.s );
+        
+        // Reflect the hour transision that just happened to get us here
+        time_since_lanuch.h++;
+        
+        // Day happen to roll?
+        if ( time_since_lanuch.h++ >=24 ) {
+            time_since_lanuch.h=0;
+            time_since_lanuch.d ++;            
+            // run() will catch if this overflowed into long now mode
+        }            
+        
+        
+        // Here we know that we are at the top of an hour (h=s=0) and ready for run()
+        
+    }    
+    
+    run( time_since_lanuch.d , time_since_lanuch.h );
 
     // If we get here, then we have been running continuously for 1 million days.
     // TODO: Have the unit use its recently evolved sentience to add an additional digit to the days display.

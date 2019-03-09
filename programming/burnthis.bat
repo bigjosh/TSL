@@ -176,11 +176,11 @@ if errorlevel 1 (
 :end
 
 REM Clean up after ourselves 
-rm %tempeepromfile%
-rm %tempunparsedstarttimefile%
-rm %tempdeviceidfile%
-rm %tempfirmwarehashfile%
-rm %tempfirmwarerecordfile%
+del %tempeepromfile%
+del %tempunparsedstarttimefile%
+del %tempdeviceidfile%
+del %tempfirmwarehashfile%
+del %tempfirmwarerecordfile%
 
 
 @if "%errormessage%"=="" (
