@@ -1,0 +1,4 @@
+# Project-specific .gitignore
+# 
+# We use this empty ignore so that the programming EXE bins can show up on git
+# and get virsion controlled. 
