@@ -106,7 +106,7 @@ https://airtable.com/account
 
 Copy the value if one is there, hit generate if not.
 
-The first time you run the procedure below, you will be prompted to enter the API key. The key you enter will be stored in the Windows register for the local user on the local computer so you do not need to enter again.
+The first time you run the procedure below, you will be prompted to enter the API key. The key you enter will be stored in the Windows registry for the local user on the local computer so you do not need to enter again.
 
 If you ever want to remove the stored API key (you are selling the computer, or you need to enter a new value), you can run this command...
 
