@@ -1279,6 +1279,7 @@ void emit_code_for_lcd_steps( const char *seq_name , lcd_reg_state initial_lcd_r
 	}
 
 	cout << "//--- end of lcd_optimized_run_" << seq_name  << endl;
+	cout << endl;
 
 }
 
@@ -1464,7 +1465,7 @@ void lcdEmitReadyToLaunchPatternCode() {
 	printasm("sbis 0x12, 7", "", "This will skip the next instruction if the pin is in");
 	printasm("ret", "", "If the pin is pulled, then Return immedeately");
 	printasm("SBIS 0x1a, 2", "", "Skip to next phase if (VPORT2.IN & 0x04)");
-	printasm("RJMP . 1b", "", "...or go back to sleep and wait again");
+	printasm("RJMP 1b", "", "...or go back to sleep and wait again");
 	cout << ".ENDM";
 	cout << endl;
 
