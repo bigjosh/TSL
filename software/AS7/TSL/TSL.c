@@ -2318,7 +2318,7 @@ void finish_hour( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
     uint8_t so = s - (st*10);   // seconds ones place
         
     while (m<60) {
-
+        
         showNowM(m);
 
         while (st<6) {
@@ -2387,6 +2387,9 @@ void run( uint24_t d , uint8_t h) {
         // This takes a lot of power so only do it once every 8 days
         // Starting at the beginning of day 1 when things have started to settle down
         // and we have recovered from the traumatic flashbulb currents
+        
+        #warning
+        colonLOn();
 
         if ( (d & 0x07) == 0x01 ) {     // Every 8 days, starting on day0->day1 transition
             if (  check_low_battery() ) {
@@ -2398,14 +2401,14 @@ void run( uint24_t d , uint8_t h) {
             }
         }
 
-        if (  (d & 127) == 0x00 ) {     // Every 128 days.... (every 100 days would be more fun, but that would require an expensive divide!)
+        if (  ( ((uint8_t)d) & 127) == 0x00 ) {     // Every 128 days.... (every 100 days would be more fun, but that would require an expensive divide!)
 
             clearLCD();
             showc2018JOSH();            // Show copyright egg
 
             sleep_until_first_half_of_second();  // Show for 0.5 second
             
-            // Note that we can't show for more than 1 second because then we would miss entering the optimized loop at 0000
+            // Note that we can't show for more than 0.5 second because then we would miss entering the optimized loop at 0000
         }
 
     }                   // d
@@ -2685,7 +2688,6 @@ int main(void)
 
         // This is our first power up in the factory. We need to init the RTC and set the current time
 
-        #warning
 
         /*
 
@@ -2694,7 +2696,7 @@ int main(void)
             // Hmmm.... We seem to have triggered even though we are in factory startup?
             // This is wonky
             
-            // Note that this safety check prevents us from setting the start time and trigger time n the EEPROM at the same time
+            // Note that this safety check prevents us from setting the start time and trigger time in the EEPROM at the same time
             // To do that, you must first set the start time and power up, and then set the trigger time after. 
 
             eepromErrorMode(4);
