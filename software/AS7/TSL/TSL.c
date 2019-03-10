@@ -2328,7 +2328,7 @@ void finish_hour( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
             while (so<10) {
 
                 showNowS1s( so );
-
+                
                 // To avoid incrementing the count on spurious interrupts, we check FOUT
                 // level and interlock.
 
@@ -2685,6 +2685,10 @@ int main(void)
 
         // This is our first power up in the factory. We need to init the RTC and set the current time
 
+        #warning
+
+        /*
+
         if (load_trigger_flag_from_EEPROM() ) {
 
             // Hmmm.... We seem to have triggered even though we are in factory startup?
@@ -2699,6 +2703,7 @@ int main(void)
 
         }
 
+        */
 
         showSetCloc();
 
@@ -3012,7 +3017,8 @@ int main(void)
         __builtin_unreachable();
 
     }
-        
+
+       
     // We are ready to start counting! See you in 30 years!
 
     // time_since_lanch has our count ready for us.
@@ -3031,7 +3037,7 @@ int main(void)
     
     if ( time_since_lanuch.m != 0 || time_since_lanuch.s != 0 ) {
                 
-        // Finishhour runs until the next hour clicks. Note that it does not update any of the values. This is OK because
+        // Finishhour() runs until the next hour clicks. Note that it does not update any of the values. This is OK because
         // we KNOW that m and s will be 0 at the top of the hour, and we know that it will be one hour later.                 
         finish_hour( time_since_lanuch.d , time_since_lanuch.h , time_since_lanuch.m , time_since_lanuch.s );
         
@@ -3039,17 +3045,16 @@ int main(void)
         time_since_lanuch.h++;
         
         // Day happen to roll?
-        if ( time_since_lanuch.h++ >=24 ) {
+        if ( time_since_lanuch.h >=24 ) {
             time_since_lanuch.h=0;
             time_since_lanuch.d ++;            
             // run() will catch if this overflowed into long now mode
         }            
-        
-        
+
         // Here we know that we are at the top of an hour (m=s=0) and ready for run()        
         
     }    
-    
+            
     // Enter the long optimized run. Returns on day 1000000. 
     // Note that you can only enter the optimized at the top of the hour
     

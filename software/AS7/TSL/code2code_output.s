@@ -11,6 +11,7 @@
     // Someday we can shrinnk this down to just a SLEEP when
     // PCB V6 comes out.
     // Interlock on a high-to-low then low-to-high transition on FOUT (1 second)
+
     SLEEP                    ; Wait for any edge interrupt from RX8900
     SBIC 0x1a, 2             ; Skip to next phase if !(VPORT2.IN & 0x04)
     RJMP . - 6               ; ...or go back to sleep and wait again

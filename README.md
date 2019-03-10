@@ -220,7 +220,7 @@ The `X` after `EEPro` is a code that tells you the first problem found (they are
 | 2 | Invalid `START FLAG` |
 | 3 | Invalid `TRIGGER FLAG` |
 | 4 | `TRIGGER FLAG` set but `START FLAG` not set |
-| 5 | `TRIGGER TIME` is before `START TIME` | 
+| 5 | `TRIGGER TIME` is in the future | 
 | 6 | _[elided]_ |
 | 7 | Invalid `START TIME` | 
 | 8 | Invalid `TRIGGER TIME` | 
@@ -235,7 +235,7 @@ How could the user have pulled the trigger if we never set the start time? Impos
 
 #### Code 5
 
-To find the Time Since Launch, we need to subtract the `STARTTIME` from the `TRIGGERTIME`, so the `TRIGGERTIME` must be *after* the `STARTSTART`. 
+To find the Time Since Launch, we need to subtract the time now from the `TRIGGERTIME`, so the `TRIGGERTIME` must be *before* now. 
 
 #### Code 6
 
@@ -282,19 +282,15 @@ Left `:` is on to differentiate this display.
 
 ##### Phase 2
 
-the current time as loaded from the RTC on the display. This will show even if the clock has not been initialized. 
+Will show the stored trigger time. The left & right `:`'s are lit to differentiate this display.
+
+The display will show "no triG" if the EEPROM trigger flag is not set.   
+
 
 The right `:` is lit to differentiate this display.
 
-Left decimal point means low voltage flag set in RX8900 right now.
+(Note this changed in ver 1.04)
 
-Right decimal point means low voltage flag is set in EEPROM (we have seen a low voltage on RX8900 in the past). Once set, the low voltage flag in EEPROM stays set forever. 
-
-The low voltage flag indicates that the voltage to the RTC dropped low enough that the RTC at least stopped counting, and possibly lost all the values in the time registers.
-
-The RX8900 low voltage is checked and the EEPROM flag is set *after* this diagnostic screen, so you can see the RTC showing low voltage but the EEPROM flag not set if this is the first time we are powering up since the low voltage event happened on the RTC.  
-
-The low voltage flag is cleared in the RX8900 when it is programmed with the start time at the factory. 
 
 ##### Phase 3
 
@@ -305,9 +301,20 @@ The right LCD module shows `VErXXX` where `XXX` is the current firmware version 
 
 #### `T` Pin
 
-Grounding the `T` pin will show the stored trigger time. The left & right `:`'s are lit to differentiate this display.
+Grounding the `T` pin will show  current time as loaded from the RTC on the display. This will show even if the clock has not been initialized. 
 
-The display will show "no triG" if the EEPROM trigger flag is not set.   
+Left decimal point means low voltage flag set in RX8900 right now.
+
+Right decimal point means low voltage flag is set in EEPROM (we have seen a low voltage on RX8900 in the past). Once set, the low voltage flag in EEPROM stays set forever. 
+
+
+The low voltage flag indicates that the voltage to the RTC dropped low enough that the RTC at least stopped counting, and possibly lost all the values in the time registers.
+
+The RX8900 low voltage is checked and the EEPROM flag is set *after* this diagnostic screen, so you can see the RTC showing low voltage but the EEPROM flag not set if this is the first time we are powering up since the low voltage event happened on the RTC.  
+
+The low voltage flag is cleared in the RX8900 when it is programmed with the start time at the factory. 
+
+(Note this changed in ver 1.04)
 
 
 ## Interesting twists
