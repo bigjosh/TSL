@@ -152,11 +152,11 @@ if errorlevel 1 (
 echo Starting time programming sequence at %time%
 
 REM Next lets generate the eeprom block with the current time as start time
-eeprom-utils-bin\tsl-make-block %tempeepromfile% -o %delayseconds% | findstr "Start time" >%tempunparsedstarttimefile%
+eeprom-utils-bin\tsl-make-block %tempeepromfile% -o %delayseconds% | findstr "BURNTIME:" >%tempunparsedstarttimefile%
 set /p starttimeline=<%tempunparsedstarttimefile%
 REM The time is after the string "Start time:"
-REM This funky syntax does a substring starting at pos 10
-set "starttime=%starttimeline:~11%"
+REM This funky syntax does a substring starting at pos 9
+set "starttime=%starttimeline:~9%"
 
 REM And now program the eeprom block into the XMEGA
 "C:\Program Files (x86)\Atmel\Studio\7.0\atbackend\atprogram.exe" --tool avrispmk2 --interface pdi --device atxmega128b3 erase --eeprom program --eeprom --format bin --verify --file %tempeepromfile% 
@@ -181,7 +181,7 @@ echo Airtable insert success
 :end
 
 REM testing
-copy %tempeepromfile% .
+REM copy %tempeepromfile% .
 
 REM Clean up after ourselves 
 del %tempeepromfile%

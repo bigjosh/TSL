@@ -33,9 +33,7 @@ void write_bcd( FILE *f , uint8_t v) {
 int parse2digitstr(int  *n, const char* s) {
 
 	int tens, ones;
-
-	cout << "parse 2 " << s << endl;
-
+	
 	if (!isdigit(*s)) {
 		return -1;
 	}
@@ -60,7 +58,7 @@ int parse2digitstr(int  *n, const char* s) {
 void printtm(struct tm* tm) {
 	char buffer[26];
 	strftime(buffer, 26, "%Y:%m:%d %H:%M:%S", tm);
-	std::cout << "time set to:" << buffer << endl;
+	std::cout << buffer;		
 }
 
 // Returns string of the malformed field, or null if success
@@ -68,8 +66,6 @@ void printtm(struct tm* tm) {
 const char *parsetimestr(struct tm *tm_out, const char* s) {
 
 	struct tm tm;
-
-	cout << "start parse" << endl;
 
 	int century, year;
 
@@ -107,13 +103,7 @@ const char *parsetimestr(struct tm *tm_out, const char* s) {
 
 	s += 2;
 
-	cout << "end parse" << endl;
-
-	printtm(&tm);
-
 	*tm_out = tm;
-
-	cout << "parse time:" << *time << endl;
 
 	return NULL;
 
@@ -151,8 +141,6 @@ int main( int argc , char **argv ) {
 		std::cout << "       times are GMT by convention. If you use offset, current time will convert to GMT\n";
 		return 1;
 	}
-
-	cout << "argc:" << argc <<endl;
 
 	// Grab time now first
 
@@ -208,6 +196,12 @@ int main( int argc , char **argv ) {
 				starttime_set_flag = true;
 
 				cout << "Using offset: " << offset << endl;
+
+			
+				cout << "BURNTIME:";  // This string is searched for by burnthis.bat so don't change it. 
+				printtm(&tm_start_gmt);
+				cout << endl;
+
 
 				break;
 
@@ -293,7 +287,7 @@ int main( int argc , char **argv ) {
 	if (triggertime_set_flag) {
 		char buffer[26];
 		strftime(buffer, 26, "%Y:%m:%d %H:%M:%S", &tm_trigger_gmt);
-		std::cout << "Triggfer time set to:" << buffer << endl;
+		std::cout << "Trigger time set to:" << buffer << endl;
 	}
 
 	if (low_voltage_flag) {
