@@ -2398,14 +2398,14 @@ void run( uint24_t d , uint8_t h) {
             }
         }
 
-        if ( ( d -  (d /100 ) ) == 0x00 ) {     // Every 100 days....
+        if (  (d & 127) == 0x00 ) {     // Every 128 days.... (every 100 days would be more fun, but that would require an expensive divide!)
 
             clearLCD();
             showc2018JOSH();            // Show copyright egg
 
             sleep_until_first_half_of_second();  // Show for 0.5 second
-            clearLCD();
-
+            
+            // Note that we can't show for more than 1 second because then we would miss entering the optimized loop at 0000
         }
 
     }                   // d
@@ -2429,23 +2429,25 @@ void showPinBPhase1() {
 
 void showPinBPhase2() {
 
-    // Show clock time from RTC
+    // Show trigger time 
     // Right `:` lit
     // Decimal points indicate the Low Voltage flags
+        
+    if ( load_trigger_flag_from_EEPROM() ) {
 
-    if ( rx8900_low_voltage_check()  ) {
-        decimalLOn();
-    }
+        rx8900_time_regs_block_t trigger_time_reg_block;
 
-    if ( load_low_voltage_flag_from_EEPROM() != 0x00 ) {
-        decimalROn();
-    }
+        load_triggertime_from_EEPROM( &trigger_time_reg_block );
 
-    rx8900_time_regs_block_t time_now_reg_block;
+        colonROn();
 
-    colonROn();
-    rx8900_time_regs_get( &time_now_reg_block );
-    showClockTime( &time_now_reg_block );
+        showClockTime( &trigger_time_reg_block );
+
+    } else {
+
+        showNoTrig();
+    }    
+    
 
 }
 
@@ -2470,24 +2472,23 @@ void showPinBPhase3() {
 
 }
 
-// Diagnostic display when Pin B is grounded durring startup
+// Diagnostic display when Pin B is grounded during startup
 
 void showPinT() {
+    
 
-    if ( load_trigger_flag_from_EEPROM() ) {
-
-        rx8900_time_regs_block_t trigger_time_reg_block;
-
-        load_triggertime_from_EEPROM( &trigger_time_reg_block );
-        colonLOn();
-        colonROn();
-
-        showClockTime( &trigger_time_reg_block );
-
-    } else {
-
-        showNoTrig();
+    if ( rx8900_low_voltage_check()  ) {
+        decimalLOn();
     }
+
+    if ( load_low_voltage_flag_from_EEPROM() != 0x00 ) {
+        decimalROn();
+    }
+    
+    rx8900_time_regs_block_t time_now_reg_block;
+
+    rx8900_time_regs_get( &time_now_reg_block );
+    showClockTime( &time_now_reg_block );
 
 }
 
@@ -2601,11 +2602,11 @@ int main(void)
         // Left decimal point means low voltage flag set in RX8900
         // Right decimal point means low voltage flag set in EEPROM (we have seen a low voltage on RX8900 in the past)
 
-        showPinBPhase1();
+        showPinBPhase1();           // Start time
         sleep_until_next_second();
 
         clearLCD();
-        showPinBPhase2();
+        showPinBPhase2();           // Trigger time
         sleep_until_next_second();
 
         clearLCD();
@@ -2621,8 +2622,6 @@ int main(void)
     while (diagnostic_in_PinT_Grounded()) {
 
         // Test pin T will show the current trigger time - even if it has not been set yet
-        // Left colon indicates trigger time
-        // Right decimal point means trigger has been pulled
 
         showPinT();
         sleep_cpu();
@@ -2690,6 +2689,9 @@ int main(void)
 
             // Hmmm.... We seem to have triggered even though we are in factory startup?
             // This is wonky
+            
+            // Note that this safety check prevents us from setting the start time and trigger time n the EEPROM at the same time
+            // To do that, you must first set the start time and power up, and then set the trigger time after. 
 
             eepromErrorMode(4);
 
@@ -2772,6 +2774,8 @@ int main(void)
         // reset at factory) so nothing we can do about it now
 
     }
+    
+    // Have we ever had a low voltage condition?
 
     if (load_low_voltage_flag_from_EEPROM() ) {
 
@@ -2838,12 +2842,6 @@ int main(void)
 
         }
 
-        // This jumps us to the beginning of the next second on the RTC
-        // This way we know when we do the Time Since Launch calculation we are including the
-        // current full second
-
-        sleep_until_next_second();
-
         // Fall though to normal run mode below...
 
     } else {
@@ -2887,7 +2885,7 @@ int main(void)
 
         }
 
-        _delay_ms(100);         // Debounce the pin
+        _delay_ms(100);         // Debounce the trigger pin being inserted so we don't prematurely fire
 
         // if we get here, we know we have never been triggered and the pin is armed and ready
 
@@ -2896,14 +2894,9 @@ int main(void)
 
         // Show a nice pattern until the pin is pulled that shows we are ready
 
-        // TODO: Check for low battery in here?
-        // TODO: Make more power efficient? UPDATE: Done!!!!! THis is hyperoptimized code!
-
-        // SHow the optimized ready mode figure 8 pattern until trigger pin is pulled. 
+        // Show the optimized ready mode figure 8 pattern. This will return when trigger pin is pulled. 
         lcd_optimized_run_ready();
         
-        //figure8PatternUntilTriggerReleased();
-
         // Trigger pin pulled!
 
         // Clear the display for instant feed back!
@@ -2929,16 +2922,23 @@ int main(void)
 
         rx8900_reset();
 
+
+        // Put a fake "000000 000000" on the display
+        // until we are done flashing and are able to
+        // start the real count.
+
+        showZeros();
+
         // Grab the current time from RTC!
 
-        rx8900_time_regs_block_t trigger_time;
-
-        rx8900_time_regs_get( &trigger_time );
+        rx8900_time_regs_get( &time_trigger_reg_block );
 
         // Save the triggered time to EEPROM!
 
-        save_triggertime_to_EEPROM( &trigger_time );    // Save the time we triggered forever
-        save_trigger_flag_to_EEPROM( );                 // Set the flag so we know that trigger_time in EEPROM is valid
+        save_triggertime_to_EEPROM( &time_trigger_reg_block );    // Save the time we triggered forever
+        eeprom_busy_wait();                             // Wait for save to complete just to be safe.
+        
+        save_trigger_flag_to_EEPROM();                 // Set the flag so we know that trigger_time in EEPROM is valid
         eeprom_busy_wait();                             // Wait for save to complete just to be safe.
 
         // Disable trigger pin - we do not need it ever again!
@@ -2952,11 +2952,6 @@ int main(void)
         // When we get here, the only active interrupt source should be the
         // 1Hz from the RTC
 
-        // Put a fake "000000 000000" on the display
-        // until we are done flashing and are able to
-        // start the real count.
-
-        showZeros();
 
         // Flash bulb party!!!
 
@@ -2969,12 +2964,15 @@ int main(void)
         // Coming out of this the LCD is clear, count should be 0, and we are less than 1 second
         // into the current second.
 
-    }
-
-    // When we get here, we know that the RTC has a good time and trigger_time is set.
-
-    // Now we sleep to make sure we are in sync with the RTC seconds update (the flash takes several
-    // 10D0's of milliseconds). We want to be right at the beginning of the current second
+    } 
+    
+    
+    // This jumps us to the beginning of the next second on the RTC
+    // This way we know when we do the Time Since Launch calculation we are including the
+    // current full second
+        
+    // Now we sleep to make sure we are in sync with the RTC seconds update.
+    // We want to be right at the beginning of the current second
     // because we do not want to miss a pulse between when we check the time and get counting
     // or our count display will be behind.
 
@@ -2982,11 +2980,11 @@ int main(void)
     // century interlock. If we do, then it will write back to the RTC which will set us back to the
     // beginning of the current second. The closer we are to the beginning when we do this,
     // the less time we loose. Don't fret too much, only happens once every 50 years.
+    
+    // Finally we want to be at the beginning of the second since if we are past the middle of the current second
+    // the the FOUT interlock on the first step will wait an extrta 1/2 second. 
 
-    // Now we have to figure out what the display count looks like by subtracting the
-    // time_trigger from the time_now to get the time_since_lanuch
-
-    sleep_until_next_second();
+    sleep_until_next_second(); 
 
     rx8900_time_regs_block_t time_now_reg_block;
     rx8900_time_regs_get_and_update_century_interlock( &time_now_reg_block );       // This will the century interlock and save back to EEPROM if necessary
@@ -2997,8 +2995,11 @@ int main(void)
     time_count_t time_trigger;
     rx8900_time_regs_to_count( &time_trigger , &time_trigger_reg_block );
 
-    // Time Since Launch = time now - trigger time
+    // Now we have to figure out what the display count looks like by subtracting the
+    // time_trigger from the time_now to get the time_since_lanuch
 
+    // Time Since Launch = time now - trigger time
+      
     time_count_t time_since_lanuch;
     if ( time_count_subtract( &time_since_lanuch , &time_now , &time_trigger ) ) {
 
@@ -3011,7 +3012,7 @@ int main(void)
         __builtin_unreachable();
 
     }
-
+        
     // We are ready to start counting! See you in 30 years!
 
     // time_since_lanch has our count ready for us.
@@ -3020,11 +3021,21 @@ int main(void)
     // so here we run out the current hour to get a nice even 00:00 transition so the hyperoptimized
     // code in run can take over.
     
+    // Note that this does run for the first hour after you pull the trigger since the flash takes 
+    // more than 1 second so by the time we get here the display is not at ....0000 anymore. 
+    // I had a whole fancy system to jump into a sequence midstep, but not enough memory for it
+    // so we have to be OK with a little extra power drain for the first hour of life. 
+    
+    // TODO: When we get new PCB rev that resolves the spurious FOUT triggers, then we can switch to 
+    // only interrupt once per second and get rid of the interlock
+    
     if ( time_since_lanuch.m != 0 || time_since_lanuch.s != 0 ) {
-        
+                
+        // Finishhour runs until the next hour clicks. Note that it does not update any of the values. This is OK because
+        // we KNOW that m and s will be 0 at the top of the hour, and we know that it will be one hour later.                 
         finish_hour( time_since_lanuch.d , time_since_lanuch.h , time_since_lanuch.m , time_since_lanuch.s );
         
-        // Reflect the hour transision that just happened to get us here
+        // Reflect the hour transition that just happened to get us here
         time_since_lanuch.h++;
         
         // Day happen to roll?
@@ -3035,9 +3046,12 @@ int main(void)
         }            
         
         
-        // Here we know that we are at the top of an hour (h=s=0) and ready for run()
+        // Here we know that we are at the top of an hour (m=s=0) and ready for run()        
         
     }    
+    
+    // Enter the long optimized run. Returns on day 1000000. 
+    // Note that you can only enter the optimized at the top of the hour
     
     run( time_since_lanuch.d , time_since_lanuch.h );
 
