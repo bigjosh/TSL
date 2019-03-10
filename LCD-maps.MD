@@ -370,10 +370,12 @@ The interstep macro is inserted between each step of the sequence. For the hour 
 If you have a compiler, use it! I made a new sine wave display that looks real nice. Here I made the interstep macro check the LCD frame complete flag, so the display updates as fast as the LCD can show the next fame. Sweet! 
 
 
+We can use this to replace the boring dashes display at startup!
 
+## Results
 
+### Cycles 
 
-### Results
 | Optimization | Total Display Update Cycles |
 | - | -: |
 | None | 43,200 |
@@ -381,6 +383,18 @@ If you have a compiler, use it! I made a new sine wave display that looks real n
 | Use 3 index registers |  20,595 |
 | Use cache registers | |  15,845 |
 | Suppress redundant working register loads | 15,821 |
+
+### Power 
+
+Measured at Vcc=3.6V, Temp=25C
+Sampled over 1 minute
+
+| Mode | Before | After |
+| - | -: |
+| Ready to Launch | 7.86uA | 4.64uA |
+| Run  | 6.57uA | 6.00uA |
+
+This about as low as we can go with optimization. Right now changing the font so a six does not have the top segment lit would save more power than removing *all* of the update code. That's right folks, the code that now runs on a TSL in Time Since Launch mode now uses less essentially an unmeasurable amount of power.   
 
 ### Even better
 
