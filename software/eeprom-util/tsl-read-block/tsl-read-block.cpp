@@ -75,7 +75,7 @@ static void rx8900_print_time_block(rx8900_time_regs_block_t* rx8900_time_regs_b
 	uint8_t w = bcd2c(rx8900_time_regs_block->time_regs[3]);
 
 	uint8_t d = bcd2c(rx8900_time_regs_block->time_regs[4]);
-	uint8_t mo = bcd2c(rx8900_time_regs_block->time_regs[5])+1;		// Jan = 0;
+	uint8_t mo = bcd2c(rx8900_time_regs_block->time_regs[5]);		
 
 	uint8_t y = bcd2c(rx8900_time_regs_block->time_regs[6]);
 	uint8_t i = bcd2c(rx8900_time_regs_block->time_regs[7]);     // Century interlock flag
@@ -191,6 +191,39 @@ int main(int argc, char** argv)
 	}
 	else {
 		cout << " (Trigger pin HAS been pulled)";
+	}
+	cout << endl;
+
+
+	uint8_t trigger_buffer;		// Skip buffer space
+	if (fread(&trigger_buffer, 1, sizeof(trigger_buffer), f) != sizeof(trigger_buffer)) {
+
+		cout << "ERROR reading trigger buffer byte!" << endl;
+		return 1;
+
+	}
+
+
+	// Now finally check the low voltage flag
+
+	uint8_t low_voltage_flag;		
+	if (fread(&low_voltage_flag, 1, sizeof(low_voltage_flag), f) != sizeof(low_voltage_flag)) {
+
+		cout << "ERROR reading low voltage flag byte!" << endl;
+		return 1;
+
+	}
+
+	cout << endl;
+
+
+	printf("LOWVOLTAGEFLAG: 0x%02x", low_voltage_flag);;
+
+	if (low_voltage_flag == 0x00) {
+		cout << " (No low voltage seen, clock shoudl be correct.)";
+	}
+	else {
+		cout << " (Low voltage seen, clock may be inaccurate.)";
 	}
 	cout << endl;
 

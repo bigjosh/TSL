@@ -85,7 +85,8 @@ const char *parsetimestr(struct tm *tm_out, const char* s) {
 	if (parse2digitstr(&tm.tm_mon, s)) return "Bad digit in month";
 	if ( tm.tm_mon < 1 || tm.tm_mon > 12) return "Month must be 1-12";
 
-	tm.tm_mon -= 1;		//struct tm mon: The number of months since January, in the range 0 to 11.
+	tm.tm_mon -= 1;		//struct tm mon: The number of months since January, in the range 0 to 11.  
+
 
 	s += 2;
 	if (parse2digitstr(&tm.tm_mday, s)) return "Bad digit in day";
@@ -130,14 +131,13 @@ void writetimeblock(FILE* f, tm* tm_gmt , uint8_t flag ) {
 	write_bcd(f, tm_gmt->tm_hour);
 	write_bcd(f, 1);					// Weeks. We don't use, but must be a valid power of two 1-64.
 	write_bcd(f, tm_gmt->tm_mday);
-	write_bcd(f, tm_gmt->tm_mon + 1);					// gmtime() month returned by gmtime is 0-based! But not day?!
+	write_bcd(f, tm_gmt->tm_mon +1 );				// gmtime() month returned by gmtime is 0-based! But not day?!
 	write_bcd(f, y % 100);							// 2 digit year
 	write_bcd(f, ci);								// Century intelock 
 
 	// flag
 	write_bcd(f, flag  );			// for set means set this time, for trigger means trigger has been pulled
 	write_bcd(f, 0);								// Padding
-
 }
 
 int main( int argc , char **argv ) {
@@ -157,9 +157,11 @@ int main( int argc , char **argv ) {
 	// Grab time now first
 
 	tm tm_start_gmt;
+	memset(&tm_start_gmt, 0xff , sizeof(tm_start_gmt));		// Just use 0xff in the case where this value is not used so they start out and will cause errors.
 	bool starttime_set_flag = false;
 
 	tm tm_trigger_gmt;
+	memset(&tm_trigger_gmt, 0xff , sizeof(tm_trigger_gmt));		// Just use 0xff in the case where this value is not used so they start out and will cause errors.
 	bool triggertime_set_flag = false;
 
 	bool low_voltage_flag = false;
@@ -274,7 +276,7 @@ int main( int argc , char **argv ) {
 	}
 
 	writetimeblock(f, &tm_start_gmt , starttime_set_flag ? 0x00 : 0x01 );		// 0x00=set this time, 0x01=time already set
-	writetimeblock(f, &tm_start_gmt, triggertime_set_flag ? 0x01: 0x00 );		// 0x00=trigger not pulled, 0x01=trigger pulled
+	writetimeblock(f, &tm_trigger_gmt, triggertime_set_flag ? 0x01: 0x00 );		// 0x00=trigger not pulled, 0x01=trigger pulled
 
 	// low voltage flag 
 	write_bcd(f,0);									//  0 indicates that we have not seen a low voltage since inital programming
