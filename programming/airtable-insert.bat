@@ -21,7 +21,7 @@ REM This command string comes from airtable...
 REM https://airtable.com/app11MZ4rXXpEyFnj/api/docs#curl/table:units:create
 REM ...but the syntax was a little wrong (like the XPOST?). We also use the `@` for the `-d` command to send data from a file. 
 
-curl\bin\curl -v https://api.airtable.com/v0/app11MZ4rXXpEyFnj/Units -H "Authorization: Bearer %apikey%" -d @%temp_req_file% -H "Content-Type: application/json" >%airtableresp%
+curl\bin\curl -v https://api.airtable.com/v0/app11MZ4rXXpEyFnj/Units -H "Authorization: Bearer %apikey%" -d @%temp_req_file% -H "Content-Type: application/json" >%temp_res_file%
 
 if errorlevel 1 (
 
