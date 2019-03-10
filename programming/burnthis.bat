@@ -12,7 +12,7 @@ REM Update delayseconds to reflect the number of seconds to add to the start tim
 REM the delay in getting everything programmed into the EEPROM
 
 
-set delayseconds=7
+set delayseconds=4
 set firmwarefile=tsl.hex
 
 set tempunparsedstarttimefile=%tmp%\unparsedstarttime.txt
@@ -176,6 +176,7 @@ if errorlevel 1 (
 	goto end
 )
 
+echo Airtable insert success 
 
 :end
 
