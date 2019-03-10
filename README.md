@@ -327,7 +327,7 @@ The RX8900 is programmed to generate a 1Hz output pulse (FOUT) that is connected
 
 On the falling FOUT edge the XMEGA then increments the count and updates the display and goes back to deep sleep until the next interrupt.
 
-We also did a lot of work to save power on the display updates by basically writing an optimizing compiler that transforms a sequence of LCD steps (like `0000` to `5959`) into minimal cycle count AVR assembly language that will display those steps. Do read more about it in the [LCD-maps.MD document](LCD-maps.md).      
+We also did a lot of work to save power on the display updates by basically writing an optimizing compiler that transforms a sequence of LCD steps (like `0000` to `5959`) into minimal cycle count AVR assembly language that will display those steps. Do read more about it in the [code2code.MD document](code2code.md).      
 
 ## Build notes
 
