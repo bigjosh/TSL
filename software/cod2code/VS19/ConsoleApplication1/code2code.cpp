@@ -1343,12 +1343,14 @@ void lcdEmit1hourCode() {
 	printcomment("It has hardcoded the VPORT and bit for the FOUT pin.");
 	printcomment("Someday we can shrinnk this down to just a SLEEP when");
 	printcomment("PCB V6 comes out.");
-	printcomment("Interlock on a high-to-low then low-to-high transition on FOUT (1 second)");
+	printcomment("Interlock on a low-to-high followed by high-to-low transition on FOUT (1 second)");
+	printcomment("high-to-low transition happens when seconds increments");
+	printcomment("For efficency, we assume FOUT is low in entry from the previous change.");
 	printasm("SLEEP", "", "Wait for any edge interrupt from RX8900");
-	printasm("SBIC 0x1a, 2", "", "Skip to next phase if !(VPORT2.IN & 0x04)");
-	printasm("RJMP . - 6", "", "...or go back to sleep and wait again");
+	printasm("SBIS 0x1a, 2", "", "Skip to next phase if (VPORT2.IN & 0x04) is high");
+	printasm("RJMP . - 6", "", "...or glitch so go back to sleep and wait again");
 	printasm("SLEEP", "", "Wait for any edge interrupt from RX8900");
-	printasm("SBIS 0x1a, 2", "", "Skip to next phase if (VPORT2.IN & 0x04)");
+	printasm("SBIC 0x1a, 2", "", "Skip to next phase if (VPORT2.IN & 0x04) is low");
 	printasm("RJMP . - 6", "", "...or go back to sleep and wait again");
 	cout << ".ENDM";
 	cout << endl;
@@ -1454,6 +1456,7 @@ void lcdEmitReadyToLaunchPatternCode() {
 	printcomment("After every sleep it also checks the trigger pin bit and");
 	printcomment("if the bit is set, then it will exit.");
 	printcomment("Has hardcoded the VPORT and pin for both FOUT and trigger pin.");
+
 	printasm("1:", "", "This is a local label. Google it.");
 	printasm("SLEEP", "", "Wait for any edge interrupt from RX8900");
 	printasm("sbis 0x12, 7", "", "This will skip the next instruction if the pin is in");

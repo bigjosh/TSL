@@ -889,19 +889,16 @@ inline uint8_t fout_pin_in_value() {
 // This was added because we were seeing spurious interrupts
 // sometimes due to static electricity.
 // Assumes that the FOUT pin is set to interrupt on _both_ edges.
+// Note that seconds increment on FOUT HIGH to LOW transition
 
-inline void sleep_until_first_half_of_second() {
-
-    // This first while() will fall though if FOUT is already high
-
-    while (!fout_pin_in_value()) {
-        sleep_cpu();
-    }
-    
-}    
-
+// Returns immediately after the next seconds increment event on the RX8900
 
 inline void sleep_until_next_second() {
+    
+    // On the RX89800, the seconds increments on the high-to-low transition
+    // We currently get an interrupt on both edges, and we sometimes get spurious interrupts
+    // so we have this interlock where we check for both rising and falling edges
+    // and return on the falling, which indicates that the seconds just incremented. 
 
     // This first while() will fall though if FOUT is already high
 
@@ -909,9 +906,13 @@ inline void sleep_until_next_second() {
         sleep_cpu();
     }
 
-    while (fout_pin_in_value()) {
+    // Here FOUT is high
+
+    do {
         sleep_cpu();
-    }
+    } while (fout_pin_in_value());          // Repeat until it goes low
+    
+    // Here FOUT is LOW (seconds just incremented)
 
 }
 
@@ -2242,6 +2243,32 @@ void fout_graph() {
 }
 
 
+// Continuously shows the current time
+// The right decimal point is on when fout pin is high
+// Watch to see if time changes on low-to-high or high-to-low
+// RESULTS: Seconds increments on the high-to-low!
+
+
+void testFOUTpolarity() {
+    
+    while (1) {
+        rx8900_time_regs_block_t now;
+        
+        rx8900_time_regs_get( &now );
+        
+        if (fout_pin_in_value()) {
+            
+            decimalROn();
+            } else {
+            decimalROff();
+        }
+        
+        showClockTime(&now);
+        
+    }
+    
+}
+
 
 // For testing how long a backup from the interrupt we need to discern an FOUT
 // from the RTC from a spontaneously interrupt from static electricity.
@@ -2306,7 +2333,7 @@ void fout_glitch_tester() {
 
 // Update the display until we get to top of next hour...
 // when we will be able to kick off the optimized hour long code stepper
-// Only possibly runs at power up after a battery change 
+// Remember to increment h (and possible d if rollover) on return!
 
 void finish_hour( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 
@@ -2316,7 +2343,7 @@ void finish_hour( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
         
     uint8_t st = s/10;          // seconds tens place
     uint8_t so = s - (st*10);   // seconds ones place
-        
+            
     while (m<60) {
         
         showNowM(m);
@@ -2347,7 +2374,7 @@ void finish_hour( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
         m++;
 
     }           // m
-    
+        
 }    
 
 
@@ -2357,6 +2384,46 @@ void finish_hour( uint24_t d , uint8_t h, uint8_t m , uint8_t s ) {
 void run( uint24_t d , uint8_t h) {
        
     while (d<1000000 ) {
+        
+        // Once per day on rollover to 00 hours...
+
+        // First check for low voltage
+        // This takes a lot of power so only do it once every 8 days
+        // Starting at the beginning of day 1 when things have started to settle down
+        // and we have recovered from the traumatic flashbulb currents
+        
+        // Take just the low byte of the day count.
+        
+        uint8_t d_mod_256 = (uint8_t) d;
+
+        if ( (d_mod_256 & 0x07) == 0x01 ) {     // Every 8 days, starting on day0->day1 transition
+            if ( check_low_battery() ) {
+
+                // Show blinking battery icon. Never returns.
+                low_battery_mode();
+                __builtin_unreachable();
+
+            }
+        }
+        
+        // Test with:
+        // eeprom-utils-bin\tsl-make-block.exe x.bin  -t 202001010000000 -s 20200507235946
+
+        if ( ( d_mod_256 & 127) == 0x00 ) {     // Every 128 days.... (every 100 days would be more fun, but that would require an expensive divide!)
+
+            clearLCD();
+            showc2018JOSH();            // Show copyright egg
+                        
+            _delay_ms(450);                       // FOUT will be LOW for 500ms, internal oscilator can be +/2% so leave plenty of room. 
+            
+            // FOUT should still be low here with ~50ms to spare. 
+            
+            // Note that we can't show for more than 0.5 second because then we would miss entering the optimized loop with FOUT still LOW
+            // 0.450 second egg is more modest anyway. Remember I could a put an attention getting sinewave here. Now even if someone does
+            // happened to catch it, it will be so short and rare that they will probably think they imagined it.            
+            
+        }
+        
 
         showNowD( d );
         
@@ -2369,51 +2436,22 @@ void run( uint24_t d , uint8_t h) {
                 softwareReset();                // Reset, which will jump to diagnostic display
 
             }
-            
+                                          
             showNowH(h);                   // Update hour on display    
-            
+                                           
             // Run a full hour of counts on hyper low power zombie autopiliot. 
             lcd_optimized_run_hour();
-
+                       
             h++;
         }               // h
                         
         h=0;
         d++;
 
-        // Once per day on rollover to 00 hours...
-
-        // First check for low voltage
-        // This takes a lot of power so only do it once every 8 days
-        // Starting at the beginning of day 1 when things have started to settle down
-        // and we have recovered from the traumatic flashbulb currents
-        
-        #warning
-        colonLOn();
-
-        if ( (d & 0x07) == 0x01 ) {     // Every 8 days, starting on day0->day1 transition
-            if (  check_low_battery() ) {
-
-                // Show blinking battery icon. Never returns.
-                low_battery_mode();
-                __builtin_unreachable();
-
-            }
-        }
-
-        if (  ( ((uint8_t)d) & 127) == 0x00 ) {     // Every 128 days.... (every 100 days would be more fun, but that would require an expensive divide!)
-
-            clearLCD();
-            showc2018JOSH();            // Show copyright egg
-
-            sleep_until_first_half_of_second();  // Show for 0.5 second
-            
-            // Note that we can't show for more than 0.5 second because then we would miss entering the optimized loop at 0000
-        }
-
-    }                   // d
+    }  // d
 
 }
+
 
 
 void showPinBPhase1() {
@@ -2594,8 +2632,7 @@ int main(void)
         
     // Clear the LCD so any upcoming messages will look clean
     clearLCD();
-
-
+    
     // Diagnostic functions
 
     while (diagnostic_in_PinB_Grounded()) {
@@ -2744,7 +2781,7 @@ int main(void)
 
         rx8900_time_regs_set( &now );
 
-        // Empirically determined that setting the time also resets the seconds phase and the FOUT phase
+        // Empirically determined that setting the time also resets the seconds phase and the FOUT phase to LOW
 
         rx8900_set_magic();     // As a backup plan, also store our secret magic in the unused alarm registers
                                 // so we can check later. Currently unused.
@@ -2848,7 +2885,7 @@ int main(void)
             eepromErrorMode( 8 );
 
         }
-
+                                              
         // Fall though to normal run mode below...
 
     } else {
@@ -2904,7 +2941,7 @@ int main(void)
         // Show the optimized ready mode figure 8 pattern. This will return when trigger pin is pulled. 
         lcd_optimized_run_ready();
         
-        // Trigger pin pulled!
+        // Trigger pin pulled! SHOWTIME, PEOPLE!
 
         // Clear the display for instant feed back!
 
@@ -2974,24 +3011,17 @@ int main(void)
     } 
     
     
-    // This jumps us to the beginning of the next second on the RTC
-    // This way we know when we do the Time Since Launch calculation we are including the
-    // current full second
-        
-    // Now we sleep to make sure we are in sync with the RTC seconds update.
-    // We want to be right at the beginning of the current second
-    // because we do not want to miss a pulse between when we check the time and get counting
-    // or our count display will be behind.
-
-    // We also want to be at the beginning of the current second in case we have to roll the
-    // century interlock. If we do, then it will write back to the RTC which will set us back to the
-    // beginning of the current second. The closer we are to the beginning when we do this,
-    // the less time we loose. Don't fret too much, only happens once every 50 years.
+    // If we get here because of a trigger pull, then we are pretty far into the current second. If we are more than half way
+    // then we don't want to enter the optimized hour loop since that needs us to be at the beginning of the 1st second.
+    // In that case, we want to wait until the beginning of the next second. We will then compute that the display should say "000000 000001"
+    // and will jump into the non-optimized version for the first hour. 
     
-    // Finally we want to be at the beginning of the second since if we are past the middle of the current second
-    // the the FOUT interlock on the first step will wait an extrta 1/2 second. 
-
-    sleep_until_next_second(); 
+    // If we get here because of a battery change, then we have no idea where we are in the current second. So we
+    // will wait until the next second so we know we will be at the top of the second and it will not change while we are working.
+    // This does mean that the user might see a blank display for up to 1 second after putting in the new battery, but that's ok. 
+    // The calculation below will be right since it grabs the clock time after the wait is over. 
+    
+    sleep_until_next_second();
 
     rx8900_time_regs_block_t time_now_reg_block;
     rx8900_time_regs_get_and_update_century_interlock( &time_now_reg_block );       // This will the century interlock and save back to EEPROM if necessary
@@ -3030,27 +3060,30 @@ int main(void)
     // code in run can take over.
     
     // Note that this does run for the first hour after you pull the trigger since the flash takes 
-    // more than 1 second so by the time we get here the display is not at ....0000 anymore. 
+    // more than 0.5 second so by the time we get here it is 000000 000001. 
     // I had a whole fancy system to jump into a sequence midstep, but not enough memory for it
-    // so we have to be OK with a little extra power drain for the first hour of life. 
+    // so we have to be OK with a little extra power drain for the first hour of our long life. 
     
     // TODO: When we get new PCB rev that resolves the spurious FOUT triggers, then we can switch to 
     // only interrupt once per second and get rid of the interlock
+    
+    // Note this will run except in the 1/3600 case where the person change the battery and we happened to wake up at exactly a new hour.
+    // Oh well, code is free and if it happens once then that person will get an extra second or two of battery life for free!
     
     if ( time_since_lanuch.m != 0 || time_since_lanuch.s != 0 ) {
                 
         // Finishhour() runs until the next hour clicks. Note that it does not update any of the values. This is OK because
         // we KNOW that m and s will be 0 at the top of the hour, and we know that it will be one hour later.                 
         finish_hour( time_since_lanuch.d , time_since_lanuch.h , time_since_lanuch.m , time_since_lanuch.s );
-        
-        // Reflect the hour transition that just happened to get us here
+               
+        // Reflect the hour transition that just happened to get us here (we don't get here until the previous hour is over)
         time_since_lanuch.h++;
         
         // Day happen to roll?
         if ( time_since_lanuch.h >=24 ) {
             time_since_lanuch.h=0;
             time_since_lanuch.d ++;            
-            // run() will catch if this overflowed into long now mode
+            // run() will catch if d overflowed into long now mode
         }            
 
         // Here we know that we are at the top of an hour (m=s=0) and ready for run()        

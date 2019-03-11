@@ -20,6 +20,7 @@
 
 // Count bottom 4 digits from 0000 to 5959 
 // with a 1 second interlock on VPORT2.2
+// FOUT must be low on entry or you will miss a second
 
 extern void lcd_optimized_run_hour();
             

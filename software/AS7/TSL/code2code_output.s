@@ -10,12 +10,14 @@
     // It has hardcoded the VPORT and bit for the FOUT pin.
     // Someday we can shrinnk this down to just a SLEEP when
     // PCB V6 comes out.
-    // Interlock on a high-to-low then low-to-high transition on FOUT (1 second)
+    // Interlock on a low-to-high followed by high-to-low transition on FOUT (1 second)
+    // high-to-low transition happens when seconds increments
+    // For efficency, we assume FOUT is low in entry from the previous change.
     SLEEP                    ; Wait for any edge interrupt from RX8900
-    SBIC 0x1a, 2             ; Skip to next phase if !(VPORT2.IN & 0x04)
-    RJMP . - 6               ; ...or go back to sleep and wait again
+    SBIS 0x1a, 2             ; Skip to next phase if (VPORT2.IN & 0x04) is high
+    RJMP . - 6               ; ...or glitch so go back to sleep and wait again
     SLEEP                    ; Wait for any edge interrupt from RX8900
-    SBIS 0x1a, 2             ; Skip to next phase if (VPORT2.IN & 0x04)
+    SBIC 0x1a, 2             ; Skip to next phase if (VPORT2.IN & 0x04) is low
     RJMP . - 6               ; ...or go back to sleep and wait again
 .ENDM
 
