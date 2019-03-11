@@ -345,7 +345,7 @@ To do this, you might think we could just jump to whatever the current time is..
 
 Well, I made an amazingly cool jump table system that would set up all the registers and then jump directly into the requested step by push the target onto the stack and then doing a (fake) return.... but it turns out we do not have enough FLASH for all that code!
 
-If you want to be impressed, check out the `/setup-step` branch.
+If you want to be impressed, check out the `/setup-step` [branch](https://github.com/bigjosh/TSL/blob/setup-step/software/cod2code/VS19/ConsoleApplication1/code2code.cpp#L1460).
 
 I the meantime we have no choice but to go ghetto and run though the remaining time in the current hour anytime we wake after a battery change. Once we are back at the top of an hour, we can jump into the optimized code. This is aesthetically displeasing but it is gonna be ok because this code will likely never run in our lifetime, and even then will will run for less than an hour every century. 
 
@@ -381,7 +381,7 @@ We can use this to replace the boring dashes display at startup!
 | None | 43,200 |
 | Skip redundant stores |  28,377 |
 | Use 3 index registers |  20,595 |
-| Use cache registers | |  15,845 |
+| Use cache registers   |  15,845 |
 | Suppress redundant working register loads | 15,821 |
 
 ### Power 
@@ -390,7 +390,7 @@ Measured at Vcc=3.6V, Temp=25C
 Sampled over 1 minute
 
 | Mode | Before | After |
-| - | -: |
+| - | -: |  -: |
 | Ready to Launch | 7.86uA | 4.64uA |
 | Run  | 6.57uA | 6.00uA |
 
