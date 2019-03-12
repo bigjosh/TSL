@@ -183,7 +183,9 @@ Blinks the little battery icons at 1Hz to indicate that a low battery voltage wa
 
 The battery voltage is checked once at start power up and then every 8 days in Time Since Launch mode starting at the update from day 0 to day 1. If the voltage is less than about 2.6 volts, then we go into low battery mode.
 
-When you see this, you should swap out the batteries for new ones. No need to run, you likely have moths to years to get it done before the time is lost. Be sure to use Energizer Ultra. Be sure to have the new ones ready before you remove the old ones. Change the batteries one at a time - taking the first old one out and putting the new one in, then taking the second one out and putting the new one in.
+When you see this, you should swap out the batteries for new ones. No need to run, you likely have moths to years to get it done before the time is lost. Be sure to use Energizer Ultra.  
+
+Work quickly, you may have as little as 10 seconds of coast time if the battery voltage is very low. Be sure to have the new ones ready before you remove the old ones. Change the batteries one at a time - taking the first old one out and putting the new one in, then taking the second old one out and putting the new one in. This will minimize the amount of time that the unit is completely unpowered (even having low batteries installed will charge the RTC hold over capacitor). 
 
 If after you change the batteries you still see low battery mode, then pull one of the batteries out and wait for the LCD to go blank and then quickly put the battery back in. 
 

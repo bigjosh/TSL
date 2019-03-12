@@ -892,6 +892,7 @@ inline uint8_t fout_pin_in_value() {
 // Note that seconds increment on FOUT HIGH to LOW transition
 
 // Returns immediately after the next seconds increment event on the RX8900
+// Returns with FOUT LOW
 
 inline void sleep_until_next_second() {
     
@@ -2098,6 +2099,8 @@ void showZeros() {
 // The XMEGA can run down to 1.6V and the RX8900 can run down to
 // 1.6V with temp compensation down to 2V, so this should give us
 // plenty of notice
+
+// Empirically this cuts out at between 2.5V and 2.6V on Vcc
 
 #define LOW_BATTERY_VOLTAGE_X10 23
 
