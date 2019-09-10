@@ -7,7 +7,7 @@
 
 // Shown on Pin `B` diagnostic display.
 
-#define VERSION 104
+#define VERSION 105
 
 // Required AVR Libraries
 #include <avr/io.h>
@@ -1090,7 +1090,7 @@ void flash() {
 
 #define RX8900_EXTENTION_REG 0x0d
 
-void rx8900_fout_1KHz(void) {
+void rx8900_fout_1KHz_x(void) {
 
     uint8_t reg = 0b00000100;
     USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_EXTENTION_REG , &reg , 1 );
@@ -1099,12 +1099,54 @@ void rx8900_fout_1KHz(void) {
 
 // Set FOUT on the RX8900 to 1Hz (default 32Khz)
 
-void rx8900_fout_1Hz(void) {
+void rx8900_fout_1Hz_x(void) {
 
     uint8_t reg = 0b00001000;
     USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_EXTENTION_REG , &reg , 1 );
 
 }
+
+// Called anytime the RX8900 has seen low voltage (VLF)
+// Sets all the control registers to known values 
+// Clears the flags, so make sure you save any that you need before calling
+// Does not reset the time counter 
+
+void rx8900_initialize(void) {
+
+    // First the  EXTENTION register
+    // TEST  0 = Normal
+    // WADA  0 = Week alarm (rather than day) (we don't care)
+    // USEL  1 = Minute update (rather than second) (we don't use, so pick the slower one?)
+    // TE    0 = Stops the fixed cycle interrupt (we don't use)
+    // FSEL 10 = 1 Hz FOUT
+    // TSEL 11 = 1 minute count down interrupt (we don't use, so pick the slowest one?)
+
+    const uint8_t ex_reg = 0b00101011;
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_EXTENTION_REG , &ex_reg , 1 );
+
+    // Next the FLAGS register
+    
+    // Importantly clears the low voltage detect flags to zero
+    // also clears a bunch of alarm flags we don't use
+    
+    const uint8_t flag_reg = 0b00000000;
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_FLAG_REG , &flag_reg , 1 );
+
+    // Note here we reset. which is OK becuase to get here the low voltage detect had to be set. 
+
+    const uint8_t contrl_reg = 0b01000000;     // 2s temp comp, no timers or interrupts or alarms, NO RESET
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_CONTROL_REG, &contrl_reg, 1 );
+    
+    // Default with MOS switch closed, sampled 2ms every 1s
+    
+    const uint8_t backup_reg= 0;
+
+    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_BACKUP_REG , &backup_reg , 1 );    
+    
+}
+
 
 
 uint8_t bcd2c( uint8_t bcd ) {
@@ -1240,7 +1282,7 @@ uint8_t rx8900_check_magic() {
 
 // Open the MOS switch between Vdd and Vbat
 
-void rx8900_open_MOS() {
+void rx8900_open_MOS_x() {
 
     // Turn off the switch and disable the voltage detection system
     // The datasheet strongly suggests that the switch can not be opened unless
@@ -1256,7 +1298,7 @@ void rx8900_open_MOS() {
 
 // Close the MOS switch between Vdd and Vbat. Leaves voltage detector off
 
-void rx8900_close_MOS() {
+void rx8900_close_MOS_x() {
 
     // Turn on the switch and disable the voltage detection system
 
@@ -1297,7 +1339,7 @@ uint8_t rx8900_check__voltage_24() {
 
 // Clears the VLF (voltage to low for operation) and VDET (voltage was too low for temp compensation) flags
 
-void rx8900_low_voltage_clear() {
+void rx8900_low_voltage_clear_x() {
 
     uint8_t zero=0;
 
@@ -2296,7 +2338,7 @@ void fout_glitch_tester() {
     digitShow( 5 , glitches  );
 
    // Enable the 1Hz output from the RTC
-   rx8900_fout_1Hz();
+   //rx8900_fout_1Hz();
 
    reset_count++;
    if (reset_count>9) reset_count=0;
@@ -2578,55 +2620,70 @@ int main(void)
 	sleep_enable();         // This chip needs you to tell it that it is ok to sleep before the sleep instruction will actually work
 
     initFlashBulbs();       // Enable output on the pins that control the transistors that flash the flash LEDs
+    
+    output1onFOEpin();      // Enable the 1Hz output from the RTC via its Frequency Output Enable pin
+                            // Note that this only matters on ver5 PCBs. On ver6, FOUT is connected to the RTC Vcc so it will cut out quicker when battery is pulled. 
+    
+    
+    /* 
+        Access wait time
+        (After initial power on)
+        tCL After VDD=2.5V 30 - - ms
+        
+    */ 
+    
+    // Oh man the data sheet sucks here, it specifies the *min* time it can take to settle, rather than the max...
+    
+   // To be safe, lets wait a full second...
 
+    lcd_optimized_run_sinewave();        // 0.5 sec
+    lcd_optimized_run_sinewave();        // 0.5 sec
+    
+    uint8_t rx8900_low_voltage_flag =0; 
+          
+    if (rx8900_low_voltage_check()) {
+        
+        // Save that we saw a low voltage since the initialization below will clear it
+        
+        rx8900_low_voltage_flag =1;
+        
+        /*
+            If VLF-bit returns “1”, please initialize all registers. Please perform initial setting only tSTA (oscillation start time), when the
+            built-in oscillation is stable.
+            
+            Oscillation start time tSTA
+            Ta= +25C, VDD=1.6 V to  5.5 V ,             1.0s Max.
+            Ta= -40 to +85C, VDD=1.6 V to 5.5 V,        3.0s Max.
+            
+        */
+        
+        // Since VLF is 1, that means that the RTC has lost any data in it and needs to be reset.
+        // Furthermore, we must wait for the oscillator to stabilize before we can start updating registers.
+        // We take the worst case and wait 3s. We already waited 1 second above for tCL, so 2 more...
+
+        // Delay 2 secs for RX8900 to warm up  (and to show off)
+        lcd_optimized_run_sinewave();        // 0.5 sec
+        lcd_optimized_run_sinewave();        // 0.5 sec
+        lcd_optimized_run_sinewave();        // 0.5 sec
+        lcd_optimized_run_sinewave();        // 0.5 sec
+
+                        
+    }
+    
+    // Technically we do not need to initialize unless there was a low voltage, but here we do it every time
+    // since it does not mess anything up, and it makes development easier becuase we always now how the registers are set. 
+    
+    rx8900_initialize();
+    
+    
+    // TODO: Check if version5, open MOS
+    
+    // OK, we get here, the RX8900 is up and running, MOS closed, 1Hz FOUT
 
 
     //showDashes();           // Show "------ ------" on the screen while we wait for the RTC to warm up
 
-    // Note that up until now we have not communicated with the RX8900. It is unclear from the datasheets if we are
-    // allowed to communicate now or if we need to wait for the oscillator to stabilize first before talking
-    // over TWI, so we take the conservative approach and wait.
-       
-    // Delay 2 secs for RX8900 to warm up  (and to show off) 
-    lcd_optimized_run_sinewave();        // 0.5 sec
-    lcd_optimized_run_sinewave();        // 0.5 sec
-    lcd_optimized_run_sinewave();        // 0.5 sec
-    lcd_optimized_run_sinewave();        // 0.5 sec
-          
-
-    // tSTA RX8900 oscillator stabilization time 1s max at 25C
-    // "Please perform initial setting only tSTA (oscillation start time), when the
-    // built-in oscillation is stable."
-
-    // Note that we can not use the interrupt to wake us from sleep here because
-    // the RTC is not sending it yet!
-                            
-    // Note that right now the MOS switch will be open for the first second, and then will close if the
-    // Vcc voltage is high enough (it should be). 
-                            
-    /*
-            Before the voltage detection is performed the first time (1 sec. after initial power-up), the
-            RTC and VBAT are supplied via a diode in parallel to the PMOS-switch. If the voltage detector measures a VDD voltage
-            above VDET3-level, the RTC will enter NORMAL operation mode.
-    */
-                                                        
-
-    rx8900_open_MOS();      // Open the switch that connects Vcc to Vbat. This way when the person pulls the battery out, the
-                            // capacitor connected to Vbat will not be connected to the XMEGA and will only be used to power the RTC
-                            // This also disables voltage detection because it seems you can not open the switch with it enabled.
-                            // Note that we wait to do this until after after the oscillator has settled since it requires TWI, but
-                            // we also Want to wait at least 1 second because the RTC leaves the switch open for the first 1 second
-                            // and it is not defined what happens to the voltage detect registers after that 1 second is up....
-
-
-
-    // Now that the RTC is definitely ready, we set the FOUT to 1Hz since we will need that
-    // for waking us from sleep no matter what happens next...
-
-    rx8900_fout_1Hz();
     
-    output1onFOEpin();      // Enable the 1Hz output from the RTC via its Frequency Output Enable pin
-
     FOUT_in_pin_enable();   // Enable an interrupt on the falling edge of the 1Hz FOUT coming from the RTC
                             // Setting a new time sets FOUT low, and then it goes low again on each new seconds update.
 
@@ -2672,18 +2729,6 @@ int main(void)
 
     }
 
-    /*
-
-    // Testing if grounding these pins had an effect on ESD.
-    // UPDATE: Does not.
-
-    diagnostic_init_PinB_OutputMode();
-    diagnostic_out_PinB_0();
-    diagnostic_init_PinT_OutputMode();
-    diagnostic_out_PinT_0();
-
-    */
-    
     
     /*
     while (1) {
@@ -2724,10 +2769,9 @@ int main(void)
     }
 
 
-    if ( ! load_start_flag_from_EEPROM() ) {      // We have never set the RTC time.
+    if ( ! load_start_flag_from_EEPROM() ) {      // We need to set the RTC time.
 
         // This is our first power up in the factory. We need to init the RTC and set the current time
-
 
         /*
 
@@ -2748,21 +2792,6 @@ int main(void)
         */
 
         showSetCloc();
-
-        // Before we clear the low voltage flag on the RX8900, lets give it a little bit more time
-        // to charge the capacitor. This is defense for an issue we've seen on a few percent of units
-        // where the RTC sees a low voltage after programming.
-        // According to data sheet, the MOS switch is open for the first 1 second on power up, so
-        // maybe with the internal diode and the 100OHM resistor we need more to fully charge?
-        // No downside except a programming cycle takes longer.
-
-        rx8900_close_MOS();
-        _delay_ms(1500);
-        rx8900_open_MOS();
-
-        // Clear the low voltage flag (always set on initial powerup)
-        // We are about to put a known good time in, so we don't care what has happened to the RTC.
-        rx8900_low_voltage_clear();
 
         /// Set the current time from START_TIME in EEPROM into the RTC timekeeping registers!
 
@@ -2807,9 +2836,9 @@ int main(void)
     } // if (load_start_flag_from_EEPROM() == 0x00 )
 
 
-    // Do we have a low voltage condition now?
+    // Did we see the low voltage flag set when we powered up?
 
-    if ( rx8900_low_voltage_check() ) {
+    if ( rx8900_low_voltage_flag ) {
 
         // Permanently remember this since we now do not know what time it is ever again
         save_low_voltage_flag_to_EEPROM();
