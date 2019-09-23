@@ -1143,7 +1143,7 @@ void rx8900_initialize(void) {
     
     const uint8_t backup_reg= 0;
 
-    USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_BACKUP_REG , &backup_reg , 1 );    
+   // USI_TWI_Write_Data( RX8900_TWI_ADDRESS , RX8900_BACKUP_REG , &backup_reg , 1 );    
     
 }
 
