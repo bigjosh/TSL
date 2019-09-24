@@ -1,24 +1,21 @@
-RefDes,Name,Value,Manufacturer,Place,Subsitution,Budget Price at 1K units,URL
-C1,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693
-C2,CAP_1210,CAP CER 100UF 10V X5R 1210,Samsung,,Possible,0.43,https://www.digikey.com/product-detail/en/samsung-electro-mechanics/CL32A107MPVNNNE/1276-3364-1-ND/3891450
-C3,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693
-C4,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693
-C5,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693
-C6,CAP_0805,,,DNP,,,
-C7,CAP_0603,,,DNP,,,
-C8,CAP_0603,,,DNP,,,
-C9,CAP_0603,CAP CER 1UF 10V X7R 0603,Samsung,,Possible,0.016,https://www.digikey.com/product-detail/en/samsung-electro-mechanics/CL10B105KP8NNNC/1276-1946-1-ND/3890032
-J1,LCD-7SEG-6DIG,GDC0570 17PIN TN Positive 6 Digit 7 Segment,,DNP,,1.2,https://www.aliexpress.com/item/GDC0570-LCD-Display-Module-Clock-6-Bit-8-Characters-Dynamic-Driving-TN-Type-LCD-Screen-Display/32753320423.html
-J2,LCD-7SEG-6DIG,GDC0570 17PIN TN Positive 6 Digit 7 Segment,,DNP,,1.2,https://www.aliexpress.com/item/GDC0570-LCD-Display-Module-Clock-6-Bit-8-Characters-Dynamic-Driving-TN-Type-LCD-Screen-Display/32753320423.html
-J3,PDI-6,,,DNP,,,
-L1,SM5730UWDN05,	LED, SURFACE MOUNT, SM5730, 0.5W,Bivar,,Possible,0.0711,https://www.digikey.com/product-detail/en/bivar-inc/SM5730UWDN05/492-2162-6-ND/6007622
-L2,SM5730UWDN05,	LED, SURFACE MOUNT, SM5730, 0.5W,Bivar,,Possible,0.0711,https://www.digikey.com/product-detail/en/bivar-inc/SM5730UWDN05/492-2162-6-ND/6007622
-Q1,2N7002K,,NXP-Philips,,Possible,0.05,
-Q2,2N7002K,,NXP-Philips,,Possible,0.05,
-R1,RES_0603,100OHM 5%,,,Yes,0.016,https://www.digikey.com/product-detail/en/susumu/RR0816P-101-D/RR08P100DDKR-ND/579969
-S1,ESE18R61D,ESE18R61D,Panasonic,,,0.63,https://www.digikey.com/product-detail/en/panasonic-electronic-components/ESE-18R61D/P13373SCT-ND/822309
-U1,MCU,ATXMEGA128B3-MHR,Atmel,,,2.045,https://www.digikey.com/product-detail/en/ATXMEGA128B3-MHR/1611-ATXMEGA128B3-MHRCT-ND/6833339?utm_campaign=buynow&WT.z_cid=ref_octopart_dkc_buynow&utm_medium=aggregator&curr=usd&site=us&utm_source=octopart
-U2,RTC,RX8900SA-UA,Epson,,,1.45,https://www.mouser.com/ProductDetail/Epson-Timing/RX8900SA-UA3-PURE-SN?qs=sGAEpiMZZMtpeOq%2f1QMb1fqy80nwfsB63t5AngHeaXU%3d
-U3,XTAL,32768Hz,Epson,DNP,,,
-U4,Battery Holder,KEYSTONE1024,Keystone,,,1.601,https://www.digikey.com/product-detail/en/keystone-electronics/1024/36-1024-ND/2178268
-U5,Battery Holder,KEYSTONE1024,KeyStone,,,1.601,https://www.digikey.com/product-detail/en/keystone-electronics/1024/36-1024-ND/2178268
+RefDes,Name,Value,Manufacturer,Place,Subsitution,Budget Price at 1K units,URL,,,
+C1,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693,,,
+C2,CAP_0805,CAP CER 100UF 10V X5R 1210,Murata,,Possible,0.21,https://www.digikey.com/product-detail/en/murata-electronics/GRM219R60J476ME44D/490-13249-1-ND/5877457,,,
+C3,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693,,,
+C4,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693,,,
+C5,CAP_0603,CAP CER 0.1UF 16V X7R 0603,Murata,,Possible,0.013,https://www.digikey.com/product-detail/en/murata-electronics-north-america/GCM188R71C104KA37D/490-4774-1-ND/1641693,,,
+C6,CAP_0805,CAP CER 100UF 10V X5R 1210,Murata,,Possible,0.21,https://www.digikey.com/product-detail/en/murata-electronics/GRM219R60J476ME44D/490-13249-1-ND/5877457,,,
+C9,CAP_0805,CAP CER 100UF 10V X5R 1210,Murata,,Possible,0.21,https://www.digikey.com/product-detail/en/murata-electronics/GRM219R60J476ME44D/490-13249-1-ND/5877457,,,
+J1,LCD-7SEG-6DIG,GDC0570 17PIN TN Positive 6 Digit 7 Segment,,DNP,,1.2,https://www.aliexpress.com/item/GDC0570-LCD-Display-Module-Clock-6-Bit-8-Characters-Dynamic-Driving-TN-Type-LCD-Screen-Display/32753320423.html,,,
+J2,LCD-7SEG-6DIG,GDC0570 17PIN TN Positive 6 Digit 7 Segment,,DNP,,1.2,https://www.aliexpress.com/item/GDC0570-LCD-Display-Module-Clock-6-Bit-8-Characters-Dynamic-Driving-TN-Type-LCD-Screen-Display/32753320423.html,,,
+J3,PDI-6,,,DNP,,,,,,
+L1,SM5730UWDN05,"	LED", SURFACE MOUNT, SM5730, 0.5W,Bivar,,Possible,0.0711,https://www.digikey.com/product-detail/en/bivar-inc/SM5730UWDN05/492-2162-6-ND/6007622
+L2,SM5730UWDN05,"	LED", SURFACE MOUNT, SM5730, 0.5W,Bivar,,Possible,0.0711,https://www.digikey.com/product-detail/en/bivar-inc/SM5730UWDN05/492-2162-6-ND/6007622
+Q1,2N7002K,,NXP-Philips,,Possible,0.05,,,,
+Q2,2N7002K,,NXP-Philips,,Possible,0.05,,,,
+R2,RES_0603,100OHM 5%,,,Yes,0.016,https://www.digikey.com/product-detail/en/susumu/RR0816P-101-D/RR08P100DDKR-ND/579969,,,
+S1,ESE18R61D,ESE18R61D,Panasonic,,,0.63,https://www.digikey.com/product-detail/en/panasonic-electronic-components/ESE-18R61D/P13373SCT-ND/822309,,,
+U1,MCU,ATXMEGA128B3-MHR,Atmel,,,2.045,https://www.digikey.com/product-detail/en/ATXMEGA128B3-MHR/1611-ATXMEGA128B3-MHRCT-ND/6833339?utm_campaign=buynow&WT.z_cid=ref_octopart_dkc_buynow&utm_medium=aggregator&curr=usd&site=us&utm_source=octopart,,,
+U2,RTC,RX8804CE:XA3,Epson,,,3.37,https://www.digikey.com/product-detail/en/epson/RX8804CE:XA3/SER4419CT-ND/10239842,,,
+U4,Battery Holder,KEYSTONE1024,Keystone,,,1.601,https://www.digikey.com/product-detail/en/keystone-electronics/1024/36-1024-ND/2178268,,,
+U5,Battery Holder,KEYSTONE1024,KeyStone,,,1.601,https://www.digikey.com/product-detail/en/keystone-electronics/1024/36-1024-ND/2178268,,,
