@@ -1,0 +1,16 @@
+1.
+No ultrasound cleaning - RTC clock part U3 is sensitive to vibration.
+
+2.
+LCD parts L1 and L2 are to be hand soldered. They mount with the LCD face on the FRONT side of the PCB. 
+
+3.
+LCD parts L1 and L2 are heat sensitive. Avoid overheating when soldering.
+
+4.
+Use the solder reflow profile for RTC clock part U3, available on page 42 here...
+https://support.epson.biz/td/api/doc_check.php?dl=app_RX8804CE&lang=en
+Following this profile is critical for the performance of this part. 
+All other parts are tolerant of this profile. 
+
+
