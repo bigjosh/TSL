@@ -19,4 +19,4 @@ U1,MCU,ATXMEGA128B3-MHR,Atmel,,,2.045,https://www.digikey.com/product-detail/en/
 U3,RTC,RX8804CE:XA3,Epson,,,3.37,https://www.digikey.com/product-detail/en/epson/RX8804CE:XA3/SER4419CT-ND/10239842
 U4,Battery Holder,KEYSTONE1024,Keystone,,,1.601,https://www.digikey.com/product-detail/en/keystone-electronics/1024/36-1024-ND/2178268
 U5,Battery Holder,KEYSTONE1024,KeyStone,,,1.601,https://www.digikey.com/product-detail/en/keystone-electronics/1024/36-1024-ND/2178268
-D1,BAT54A,,ON Semi,,Possible,0.03,https://www.digikey.com/product-detail/en/on-semiconductor/BAT54ALT1G/BAT54ALT1GOSTR-ND/918314
+D1,BAT54A,,ON Semi,,Possible,0.03,https://www.digikey.com/product-detail/en/BAT54ALT1G/BAT54ALT1GOSCT-ND/917808
