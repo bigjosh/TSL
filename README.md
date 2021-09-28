@@ -327,7 +327,11 @@ The ATMEGA uses either the XTAL or the internal ULP oscillator to drive the LCD 
 
 The RX8900 is programmed to generate a 1Hz output pulse (FOUT) that is connected to an IO pin on the XMEGA. The rising and falling edges of each of these pulses causes an interrupt on the XMEGA which wakes it from deep sleep. On waking, the XMEGA checks the FOUT pin to see if it has changed, and if not then it goes back to sleep. We do this to filter spurious interrupts that can be caused by noise from static electricity from rubbing the glass.  
 
-On the falling FOUT edge the XMEGA then increments the count and updates the display and goes back to deep sleep until the next interrupt.
+On the falling FOUT edge the XMEGA then increments the count and updates the display and goes back to deep sleep until the next interrupt. 
+
+The resistor on the FOUT line is to reduce the amount of current that flows from the RTC into the MCU during a battery change. This current can flow because there is an internal clamping diode inside the MCU that is forward biased if the pin voltage is higher than the Vcc voltage, which can happen during a battery change since the RTC is running off of the backup capacitors but there is no power to the MCU. We hope that RTC will stop driving FOUT when it sees FOE drop (FOE is connected to the MCU Vcc line). 
+
+Diode D1 serves two purposes. Firstly, it prevents power from flowing from the backup capacitors into the MCU during a battery change. This will hopefully extend the time the user has to successfully complete the change since the RTC alone uses much less power than the MCU. Both sides of the diode also serve to protect both the MCU and RTC from reverse voltage in the case the batteries are inserted backwards.     
 
 We also did a lot of work to save power on the display updates by basically writing an optimizing compiler that transforms a sequence of LCD steps (like `0000` to `5959`) into minimal cycle count AVR assembly language that will display those steps. Do read more about it in the [code2code.MD document](code2code.md).      
 
@@ -417,11 +421,13 @@ Find a way to suppress the ISR call on interrupts. Maybe by playing with interru
 
 ### Hardware
 
+Trivially reroute J2:2 and J2:3 to avoid the unnecessary vias. I know one will ever see these because they are under the LCD and battery holder, but still they bug me.    
+
 Add a supplemental pull-up resistor to ~RESET line. In dry conditions it is possible to reset the XMEGA over the built-in pull-up when it is in the tube using static fields. Don't really need this since the firmware is spurious RESET tolerant, but cleaner.
 
-Add a diode or MOSFET over the RTC so that the RTC backup capacitor can not back feed the XMEGA. This would let us use the RTC built-in voltage detector to drop into backup mode which would reduce drain when batteries are pulled. Don't really need this, but cleaner at the cost of one part.
+Try using the ~INT line from the RTC to trigger an update on the MCU. We would use an internal pullup on the MUC pin. Since this pin on the RTC is open collector, this would eliminate any power drain from the RTC to the MCU during battery changes. To be seen if this set up uses significantly more power during normal operation since the RTC is shorting the pull-up to ground. We could potentially turn off the pull-up very quickly after waking, and then wait to turn it back on until we know that the ~INT pin is open again. The ~INT pin is closed fort about 7ms and then automatically opened again, so we could probably use the Watchdog timer to sleep during this period.
 
-Add an Ultra-Low Quiescent Current Low-Dropout Linear Regulator in front of the XMEAG. The current drops from 5.6uA@3.2V to 4.2uA@2.0V, so some potential for savings here, but worth the extra part?  
+Add an Ultra-Low Quiescent Current Low-Dropout Linear Regulator in front of the XMEGA. The current drops from 5.6uA@3.2V to 4.2uA@2.0V, so some potential for savings here, but worth the extra part?  
 
 Try driving the LCD bias voltages directly from the battery voltage. The Energizer Ultra's have remarkably stable voltage over most of their lives and we go into Low Battery mode when they start to drop, so might be able to save power by disabling the XMEGA charge pump and finding contrast settings that work with the battery voltage direct?
 
