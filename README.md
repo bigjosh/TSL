@@ -1,6 +1,14 @@
 # TSL
 
+![image](https://user-images.githubusercontent.com/5520281/135161339-e1a1928e-7ce5-4a06-8e08-e96bba82e6e3.png)
+
 PCB and firmware for the CW&T Time Since Launch project.
+
+Buy one here...
+https://shop.cooperhewitt.org/products/time-since-launch
+
+Or here...
+https://www.uncommongoods.com/product/time-since-launch-clock
 
 ## Design goals:
 
