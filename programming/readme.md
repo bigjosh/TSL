@@ -118,4 +118,11 @@ If you ever want to remove the stored API key (you are selling the computer, or 
 
 You can use the `read-eeprom.bat` batch file to read and print the eeprom of an attached TSL. It uses the `tsl-read-block.exe` utility to decode and print the data, and you can also use this utility to work directly with eeprom bin files created by `atprogram.exe` or the `Device Programming` function under `Tools` in Atmel Studio.  
 
-     
+### Sample block file
+
+The `party-like.bin` eeprom block will set the clock to just after midnight on Jan 1, 2000. You can use the Atmel Studio "Device programming tools" or AVRDude to load this file into EEPROM for testing.
+
+It was created with this command line...
+```
+tsl-make-block.exe party-like.bin -s 20000101000000
+```  

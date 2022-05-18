@@ -981,32 +981,43 @@ void showGoodbye() {
 }
 
 
+// Boards produced before 2021-09 used PORTD for the flash lamps.
+// The pins were then moved to PORTB for better routing with a replacement for U1. 
+// InN both cases, the alternate pins are unconnected, so we twittle both sets 
+// so this version of the firmware can work with either board version. 
+
 void FlashFetInit0(void) {
-    PORTD.DIR |= _BV(0);
+    PORTB.DIR |= _BV(0);
+    PORTD.DIR |= _BV(0);	
     // No will be driving low, which keeps the flash lamp off
 }
 
 
 void FlashFetInit1(void) {
-    PORTD.DIR |= _BV(1);
+    PORTB.DIR |= _BV(1);
+    PORTD.DIR |= _BV(1);	
     // No will be driving low, which keeps the flash lamp off
 }
 
 void FlashFetOn0() {
-    PORTD.OUTSET |= _BV(0);
+    PORTB.OUTSET |= _BV(0);
+    PORTD.OUTSET |= _BV(0);	
 }
 
 void FlashFetOff0() {
-    PORTD.OUTCLR |= _BV(0);
+    PORTB.OUTCLR |= _BV(0);
+    PORTD.OUTCLR |= _BV(0);	
 }
 
 
 void FlashFetOn1() {
-    PORTD.OUTSET |= _BV(1);
+    PORTB.OUTSET |= _BV(1);
+    PORTD.OUTSET |= _BV(1);	
 }
 
 void FlashFetOff1() {
-    PORTD.OUTCLR |= _BV(1);
+    PORTB.OUTCLR |= _BV(1);
+    PORTD.OUTCLR |= _BV(1);	
 }
 
 

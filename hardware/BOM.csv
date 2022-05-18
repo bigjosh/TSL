@@ -15,7 +15,7 @@ Q1,2N7002K,,NXP-Philips,,Possible,0.05,
 Q2,2N7002K,,NXP-Philips,,Possible,0.05,
 R2,RES_0603,100OHM 5%,,,Yes,0.016,https://www.digikey.com/product-detail/en/susumu/RR0816P-101-D/RR08P100DDKR-ND/579969
 S1,ESE18R61D,ESE18R61D,Panasonic,,,0.63,https://www.digikey.com/product-detail/en/panasonic-electronic-components/ESE-18R61D/P13373SCT-ND/822309
-U1,MCU,ATXMEGA128B3-MHR,Atmel,,,2.045,https://www.digikey.com/product-detail/en/ATXMEGA128B3-MHR/1611-ATXMEGA128B3-MHRCT-ND/6833339?utm_campaign=buynow&WT.z_cid=ref_octopart_dkc_buynow&utm_medium=aggregator&curr=usd&site=us&utm_source=octopart
+U1,MCU,ATXMEGA128B3-AU,Atmel,,,2.045,https://www.digikey.com/en/products/detail/microchip-technology/ATXMEGA128A3-AU/1886256?utm_adgroup=Integrated%20Circuits&utm_source=google&utm_medium=cpc&utm_campaign=Dynamic%20Search_EN_Product&utm_term=&utm_content=Integrated%20Circuits&gclid=CjwKCAjw-sqKBhBjEiwAVaQ9a48VUmbOuamf0eCqj9H4UpFd3CZrHOeZrLegmPADvBBMfibNJeuhOxoC6PcQAvD_BwE
 U3,RTC,RX8804CE:XA3,Epson,,,3.37,https://www.digikey.com/product-detail/en/epson/RX8804CE:XA3/SER4419CT-ND/10239842
 U4,Battery Holder,KEYSTONE1024,Keystone,,,1.601,https://www.digikey.com/product-detail/en/keystone-electronics/1024/36-1024-ND/2178268
 U5,Battery Holder,KEYSTONE1024,KeyStone,,,1.601,https://www.digikey.com/product-detail/en/keystone-electronics/1024/36-1024-ND/2178268
